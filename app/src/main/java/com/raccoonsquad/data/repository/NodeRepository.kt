@@ -38,6 +38,17 @@ class NodeRepository(private val context: Context) {
         }
     }
     
+    suspend fun addNodes(configs: List<VlessConfig>) {
+        context.dataStore.edit { prefs ->
+            val currentNodes = prefs[nodesKey] ?: "[]"
+            val jsonArray = JSONArray(currentNodes)
+            configs.forEach { config ->
+                jsonArray.put(configToJson(config))
+            }
+            prefs[nodesKey] = jsonArray.toString()
+        }
+    }
+    
     suspend fun deleteNode(uuid: String) {
         context.dataStore.edit { prefs ->
             val currentNodes = prefs[nodesKey] ?: "[]"
@@ -50,6 +61,13 @@ class NodeRepository(private val context: Context) {
                 }
             }
             prefs[nodesKey] = newArray.toString()
+        }
+    }
+    
+    suspend fun clearAll() {
+        context.dataStore.edit { prefs ->
+            prefs[nodesKey] = "[]"
+            prefs.remove(activeNodeKey)
         }
     }
     
@@ -66,6 +84,10 @@ class NodeRepository(private val context: Context) {
     suspend fun updateNode(config: VlessConfig) {
         deleteNode(config.uuid)
         addNode(config)
+    }
+    
+    fun parseMultiple(uriText: String): List<VlessConfig> {
+        return UriParser.parseMultiple(uriText)
     }
     
     fun importFromUri(uri: String): VlessConfig? {
