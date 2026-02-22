@@ -1,6 +1,5 @@
 package com.raccoonsquad
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -21,14 +20,13 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val granted = result.resultCode == RESULT_OK
-        onVpnPermissionResult(granted)
+        onVpnPermissionResult(granted, this@MainActivity)
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        // Handle initial intent
         handleIntent(intent)
         
         setContent {
