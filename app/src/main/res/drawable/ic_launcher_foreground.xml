@@ -1,0 +1,59 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Background circle -->
+    <path
+        android:fillColor="#1A1A2E"
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
+    
+    <!-- Raccoon face mask (dark area around eyes) -->
+    <path
+        android:fillColor="#2D2D44"
+        android:pathData="M34,38 Q54,32 74,38 Q72,52 54,54 Q36,52 34,38 Z"/>
+    
+    <!-- Left eye mask -->
+    <path
+        android:fillColor="#0F0F1A"
+        android:pathData="M38,40 Q44,36 50,40 Q48,48 44,48 Q40,48 38,40 Z"/>
+    
+    <!-- Right eye mask -->
+    <path
+        android:fillColor="#0F0F1A"
+        android:pathData="M58,40 Q64,36 70,40 Q68,48 64,48 Q60,48 58,40 Z"/>
+    
+    <!-- Left eye (cyan) -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M42,42 m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0"/>
+    
+    <!-- Right eye (cyan) -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M66,42 m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0"/>
+    
+    <!-- Nose -->
+    <path
+        android:fillColor="#4A4A6A"
+        android:pathData="M54,52 L50,58 Q54,62 58,58 Z"/>
+    
+    <!-- Ears -->
+    <path
+        android:fillColor="#3D3D5C"
+        android:pathData="M30,30 L38,42 L28,40 Z"/>
+    <path
+        android:fillColor="#3D3D5C"
+        android:pathData="M78,30 L70,42 L80,40 Z"/>
+    
+    <!-- Whiskers -->
+    <path
+        android:strokeColor="#4A4A6A"
+        android:strokeWidth="1"
+        android:pathData="M40,56 L28,54 M40,58 L26,60 M40,60 L28,66"/>
+    <path
+        android:strokeColor="#4A4A6A"
+        android:strokeWidth="1"
+        android:pathData="M68,56 L80,54 M68,58 L82,60 M68,60 L80,66"/>
+</vector>
