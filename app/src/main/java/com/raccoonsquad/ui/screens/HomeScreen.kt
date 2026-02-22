@@ -3,6 +3,7 @@ package com.raccoonsquad.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +18,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raccoonsquad.core.vpn.RaccoonVpnService
 import com.raccoonsquad.data.model.VlessConfig
@@ -99,9 +99,7 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { 
-                    Text(if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad") 
-                },
+                title = { Text(if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad") },
                 actions = {
                     IconButton(onClick = { showImportDialog = true }) {
                         Icon(Icons.Default.Add, "Import")
@@ -167,7 +165,6 @@ fun HomeScreen(
         }
     }
     
-    // Import Dialog with loading
     if (showImportDialog) {
         if (isImporting) {
             AlertDialog(
@@ -377,8 +374,9 @@ fun NodeCard(
     onToggle: () -> Unit
 ) {
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
     ) {
         Row(
             modifier = Modifier
