@@ -1,22 +1,34 @@
 package com.raccoonsquad
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.raccoonsquad.ui.RaccoonApp
+import com.raccoonsquad.ui.screens.onVpnPermissionResult
 import com.raccoonsquad.ui.theme.RaccoonSquadTheme
 
 class MainActivity : ComponentActivity() {
+    
+    private val vpnPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val granted = result.resultCode == RESULT_OK
+        onVpnPermissionResult(granted)
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        // Handle intent (VLESS URI import)
+        // Handle initial intent
         handleIntent(intent)
         
         setContent {
@@ -31,15 +43,15 @@ class MainActivity : ComponentActivity() {
         }
     }
     
-    override fun onNewIntent(intent: android.content.Intent) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
     }
     
-    private fun handleIntent(intent: android.content.Intent?) {
+    private fun handleIntent(intent: Intent?) {
         intent?.data?.let { uri ->
             if (uri.scheme == "vless") {
-                // TODO: Parse VLESS URI and add to nodes
+                // TODO: Handle VLESS URI import
             }
         }
     }
