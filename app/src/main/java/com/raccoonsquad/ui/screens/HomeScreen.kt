@@ -9,37 +9,59 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-
-data class NodeUiState(
-    val id: String,
-    val name: String,
-    val server: String,
-    val latency: Long?,
-    val isActive: Boolean,
-    val hasFragment: Boolean
-)
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.raccoonsquad.data.model.VlessConfig
+import com.raccoonsquad.ui.viewmodel.NodeViewModel
+import com.raccoonsquad.ui.viewmodel.NodeUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    viewModel: NodeViewModel = viewModel(),
     onAddNode: () -> Unit,
     onNodeClick: (String) -> Unit
 ) {
-    // TODO: Get from ViewModel
-    var nodes by remember { 
-        mutableStateOf(listOf<NodeUiState>()) 
-    }
+    val nodes by viewModel.nodes.collectAsState()
+    val activeUuid by viewModel.activeNodeUuid.collectAsState()
+    val importError by viewModel.importError.collectAsState()
+    val lastImported by viewModel.lastImportedNode.collectAsState()
     
     var showImportDialog by remember { mutableStateOf(false) }
     var importText by remember { mutableStateOf("") }
+    var showDeleteDialog by remember { mutableStateOf<VlessConfig?>(null) }
+    
+    val clipboardManager = LocalClipboardManager.current
+    
+    // Auto-paste from clipboard
+    LaunchedEffect(showImportDialog) {
+        if (showImportDialog) {
+            val clip = clipboardManager.getText()?.text ?: ""
+            if (clip.startsWith("vless://") && importText.isEmpty()) {
+                importText = clip
+            }
+        }
+    }
+    
+    // Show success message
+    LaunchedEffect(lastImported) {
+        if (lastImported != null) {
+            showImportDialog = false
+            importText = ""
+            viewModel.clearLastImported()
+        }
+    }
+    
+    val uiStates = remember(nodes, activeUuid) {
+        nodes.map { viewModel.toUiState(it, activeUuid) }
+    }
     
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { 
-                    Text("🦝 Raccoon Squad") 
-                },
+                title = { Text("🦝 Raccoon Squad") },
                 actions = {
                     IconButton(onClick = { showImportDialog = true }) {
                         Icon(Icons.Default.Add, "Import node")
@@ -55,7 +77,7 @@ fun HomeScreen(
             )
         }
     ) { padding ->
-        if (nodes.isEmpty()) {
+        if (uiStates.isEmpty()) {
             EmptyState(
                 modifier = Modifier
                     .fillMaxSize()
@@ -67,10 +89,14 @@ fun HomeScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(nodes) { node ->
+                items(uiStates, key = { it.id }) { node ->
                     NodeCard(
                         node = node,
-                        onClick = { onNodeClick(node.id) }
+                        onClick = { onNodeClick(node.id) },
+                        onToggle = { 
+                            viewModel.setActiveNode(if (node.isActive) null else node.id)
+                        },
+                        onDelete = { showDeleteDialog = node.config }
                     )
                 }
             }
@@ -80,29 +106,96 @@ fun HomeScreen(
     // Import Dialog
     if (showImportDialog) {
         AlertDialog(
-            onDismissRequest = { showImportDialog = false },
+            onDismissRequest = { 
+                showImportDialog = false
+                viewModel.clearImportError()
+            },
             title = { Text("Import VLESS URI") },
             text = {
-                OutlinedTextField(
-                    value = importText,
-                    onValueChange = { importText = it },
-                    label = { Text("vless://...") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp),
-                    maxLines = 5
-                )
+                Column {
+                    OutlinedTextField(
+                        value = importText,
+                        onValueChange = { importText = it },
+                        label = { Text("vless://...") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp),
+                        maxLines = 5,
+                        isError = importError != null,
+                        supportingText = importError?.let { { Text(it) } }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        TextButton(onClick = {
+                            val clip = clipboardManager.getText()?.text ?: ""
+                            if (clip.startsWith("vless://")) {
+                                importText = clip
+                            }
+                        }) {
+                            Icon(Icons.Default.ContentPaste, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Paste")
+                        }
+                        
+                        if (importText.startsWith("vless://")) {
+                            TextButton(onClick = {
+                                viewModel.importNode(importText)
+                            }) {
+                                Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Import")
+                            }
+                        }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    // TODO: Parse and add node
-                    showImportDialog = false
+                    if (importText.startsWith("vless://")) {
+                        viewModel.importNode(importText)
+                    }
                 }) {
                     Text("Import")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showImportDialog = false }) {
+                TextButton(onClick = { 
+                    showImportDialog = false
+                    importText = ""
+                    viewModel.clearImportError()
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Delete confirmation
+    showDeleteDialog?.let { node ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { Text("Delete node?") },
+            text = { Text("Delete \"${node.name}\"?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteNode(node.uuid)
+                        showDeleteDialog = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = null }) {
                     Text("Cancel")
                 }
             }
@@ -135,7 +228,9 @@ fun EmptyState(modifier: Modifier = Modifier) {
 @Composable
 fun NodeCard(
     node: NodeUiState,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Card(
         onClick = onClick,
@@ -146,12 +241,30 @@ fun NodeCard(
             supportingContent = {
                 Column {
                     Text(node.server)
-                    if (node.hasFragment) {
-                        Text(
-                            "🔧 Fragment enabled",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (node.hasFragment) {
+                            Text(
+                                "🔧 Fragment",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        if (node.hasNoise) {
+                            Text(
+                                "📡 Noise",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        if (node.mtu != "default") {
+                            Text(
+                                "📏 MTU ${node.mtu}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
                     }
                 }
             },
@@ -167,11 +280,11 @@ fun NodeCard(
                                 else -> MaterialTheme.colorScheme.error
                             }
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
                     Switch(
                         checked = node.isActive,
-                        onCheckedChange = { /* TODO */ }
+                        onCheckedChange = { onToggle() }
                     )
                 }
             },
