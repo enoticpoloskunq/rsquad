@@ -37,8 +37,24 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _importError = MutableStateFlow<String?>(null)
     val importError: StateFlow<String?> = _importError.asStateFlow()
     
-    private val _lastImportedNode = MutableStateFlow<VlessConfig?>(null)
-    val lastImportedNode: StateFlow<VlessConfig?> = _lastImportedNode.asStateFlow()
+    private val _importCount = MutableStateFlow(0)
+    val importCount: StateFlow<Int> = _importCount.asStateFlow()
+    
+    fun importNodes(text: String) {
+        viewModelScope.launch {
+            _importError.value = null
+            
+            val configs = repository.parseMultiple(text)
+            
+            if (configs.isEmpty()) {
+                _importError.value = "Не найдено VLESS ссылок"
+                return@launch
+            }
+            
+            repository.addNodes(configs)
+            _importCount.value = configs.size
+        }
+    }
     
     fun importNode(uri: String) {
         viewModelScope.launch {
@@ -47,7 +63,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             val config = repository.importFromUri(uri)
             if (config != null) {
                 repository.addNode(config)
-                _lastImportedNode.value = config
+                _importCount.value = 1
             } else {
                 _importError.value = "Неверный VLESS URI"
             }
@@ -57,6 +73,12 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteNode(uuid: String) {
         viewModelScope.launch {
             repository.deleteNode(uuid)
+        }
+    }
+    
+    fun clearAllNodes() {
+        viewModelScope.launch {
+            repository.clearAll()
         }
     }
     
@@ -70,8 +92,8 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         _importError.value = null
     }
     
-    fun clearLastImported() {
-        _lastImportedNode.value = null
+    fun resetImportCount() {
+        _importCount.value = 0
     }
     
     fun toUiState(config: VlessConfig, activeUuid: String?): NodeUiState {
