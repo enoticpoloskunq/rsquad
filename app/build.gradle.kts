@@ -86,6 +86,9 @@ dependencies {
     // VPN Service
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
     
+    // Xray-core via libv2ray.aar (downloaded from AndroidLibXrayLite)
+    implementation(files("libs/libv2ray.aar"))
+    
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
