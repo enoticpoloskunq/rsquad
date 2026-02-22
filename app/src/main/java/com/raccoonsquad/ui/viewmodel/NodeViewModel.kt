@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 
 data class NodeUiState(
     val id: String,
+    val index: Int,
     val name: String,
     val server: String,
     val latency: Long?,
@@ -51,7 +52,6 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             _importError.value = null
             
             try {
-                // Parse in background thread
                 val configs = withContext(Dispatchers.Default) {
                     repository.parseMultiple(text)
                 }
@@ -62,7 +62,6 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 
-                // Save in batches
                 withContext(Dispatchers.IO) {
                     repository.addNodes(configs)
                 }
@@ -119,9 +118,10 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         _importCount.value = 0
     }
     
-    fun toUiState(config: VlessConfig, activeUuid: String?): NodeUiState {
+    fun toUiState(config: VlessConfig, activeUuid: String?, index: Int): NodeUiState {
         return NodeUiState(
-            id = config.uuid,
+            id = "${config.uuid}_$index",
+            index = index,
             name = config.name,
             server = "${config.serverAddress}:${config.port}",
             latency = config.latency,
