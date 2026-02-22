@@ -42,7 +42,7 @@
 
         <!-- VPN Service -->
         <service
-            android:name=".core.VpnService"
+            android:name=".core.vpn.RaccoonVpnService"
             android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:foregroundServiceType="specialUse">
