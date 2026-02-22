@@ -3,6 +3,7 @@ package com.raccoonsquad.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,7 +25,38 @@ import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
 
-private const val VPN_REQUEST_CODE = 1000
+object VpnController {
+    var pendingConfig: VlessConfig? = null
+    var pendingViewModel: NodeViewModel? = null
+    
+    fun onPermissionGranted(context: android.content.Context) {
+        pendingConfig?.let { config ->
+            startVpn(context, config)
+            pendingViewModel?.setActiveNode(config.uuid)
+        }
+        clear()
+    }
+    
+    fun clear() {
+        pendingConfig = null
+        pendingViewModel = null
+    }
+    
+    private fun startVpn(context: android.content.Context, config: VlessConfig) {
+        val intent = Intent(context, RaccoonVpnService::class.java).apply {
+            action = RaccoonVpnService.ACTION_CONNECT
+            putExtra("config", config)
+        }
+        context.startService(intent)
+    }
+    
+    fun stopVpn(context: android.content.Context) {
+        val intent = Intent(context, RaccoonVpnService::class.java).apply {
+            action = RaccoonVpnService.ACTION_DISCONNECT
+        }
+        context.startService(intent)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +66,7 @@ fun HomeScreen(
     onNodeClick: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val activity = context as? Activity
     val nodes by viewModel.nodes.collectAsState()
     val activeUuid by viewModel.activeNodeUuid.collectAsState()
     val importError by viewModel.importError.collectAsState()
@@ -46,7 +79,6 @@ fun HomeScreen(
     
     val clipboardManager = LocalClipboardManager.current
     val listState = rememberLazyListState()
-    
     val snackbarHostState = remember { SnackbarHostState() }
     
     LaunchedEffect(importCount) {
@@ -93,11 +125,11 @@ fun HomeScreen(
                 nodeCount = uiStates.size,
                 onConnect = {
                     if (uiStates.isNotEmpty()) {
-                        requestVpnPermission(context as Activity, uiStates.first().config, viewModel)
+                        connectVpn(activity, uiStates.first().config, viewModel)
                     }
                 },
                 onDisconnect = {
-                    stopVpn(context)
+                    VpnController.stopVpn(context)
                     viewModel.setActiveNode(null)
                 }
             )
@@ -119,10 +151,10 @@ fun HomeScreen(
                             onClick = { onNodeClick(node.id) },
                             onToggle = {
                                 if (node.isActive) {
-                                    stopVpn(context)
+                                    VpnController.stopVpn(context)
                                     viewModel.setActiveNode(null)
                                 } else {
-                                    requestVpnPermission(context as Activity, node.config, viewModel)
+                                    connectVpn(activity, node.config, viewModel)
                                 }
                             },
                             onDelete = { showDeleteDialog = node.config }
@@ -200,49 +232,33 @@ fun HomeScreen(
     }
 }
 
-// Global state for VPN permission callback
-private var pendingVpnConfig: VlessConfig? = null
-private var pendingViewModel: NodeViewModel? = null
-
-fun requestVpnPermission(
-    activity: Activity,
+private fun connectVpn(
+    activity: Activity?,
     config: VlessConfig,
     viewModel: NodeViewModel
 ) {
+    if (activity == null) return
+    
     val intent = VpnService.prepare(activity)
     if (intent != null) {
-        pendingVpnConfig = config
-        pendingViewModel = viewModel
-        activity.startActivityForResult(intent, VPN_REQUEST_CODE)
+        // Need permission
+        VpnController.pendingConfig = config
+        VpnController.pendingViewModel = viewModel
+        activity.startActivityForResult(intent, 1234)
     } else {
-        // Already have permission
-        startVpnService(activity, config)
+        // Already have permission - start directly
+        VpnController.startVpn(activity, config)
         viewModel.setActiveNode(config.uuid)
     }
 }
 
-fun onVpnPermissionResult(granted: Boolean, context: android.content.Context? = null) {
-    if (granted && pendingVpnConfig != null && pendingViewModel != null) {
-        context?.let { startVpnService(it, pendingVpnConfig!!) }
-        pendingViewModel!!.setActiveNode(pendingVpnConfig!!.uuid)
+// Called from MainActivity onActivityResult
+fun onVpnPermissionResult(granted: Boolean, context: android.content.Context) {
+    if (granted) {
+        VpnController.onPermissionGranted(context)
+    } else {
+        VpnController.clear()
     }
-    pendingVpnConfig = null
-    pendingViewModel = null
-}
-
-private fun startVpnService(context: android.content.Context, config: VlessConfig) {
-    val intent = Intent(context, RaccoonVpnService::class.java).apply {
-        action = RaccoonVpnService.ACTION_CONNECT
-        putExtra("config", config)
-    }
-    context.startService(intent)
-}
-
-private fun stopVpn(context: android.content.Context) {
-    val intent = Intent(context, RaccoonVpnService::class.java).apply {
-        action = RaccoonVpnService.ACTION_DISCONNECT
-    }
-    context.startService(intent)
 }
 
 @Composable
