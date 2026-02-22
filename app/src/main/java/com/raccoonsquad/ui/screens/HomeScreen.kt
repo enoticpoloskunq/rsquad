@@ -3,7 +3,6 @@ package com.raccoonsquad.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -42,7 +41,7 @@ object VpnController {
         pendingViewModel = null
     }
     
-    private fun startVpn(context: android.content.Context, config: VlessConfig) {
+    fun startVpn(context: android.content.Context, config: VlessConfig) {
         val intent = Intent(context, RaccoonVpnService::class.java).apply {
             action = RaccoonVpnService.ACTION_CONNECT
             putExtra("config", config)
@@ -241,18 +240,15 @@ private fun connectVpn(
     
     val intent = VpnService.prepare(activity)
     if (intent != null) {
-        // Need permission
         VpnController.pendingConfig = config
         VpnController.pendingViewModel = viewModel
         activity.startActivityForResult(intent, 1234)
     } else {
-        // Already have permission - start directly
         VpnController.startVpn(activity, config)
         viewModel.setActiveNode(config.uuid)
     }
 }
 
-// Called from MainActivity onActivityResult
 fun onVpnPermissionResult(granted: Boolean, context: android.content.Context) {
     if (granted) {
         VpnController.onPermissionGranted(context)
