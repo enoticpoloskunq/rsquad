@@ -3,6 +3,7 @@ package com.raccoonsquad.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -89,9 +90,21 @@ fun HomeScreen(
         }
     }
     
+    // Create UI states with proper active state
     val uiStates = remember(nodes, activeUuid) {
         nodes.mapIndexed { index, config -> 
-            viewModel.toUiState(config, activeUuid, index)
+            NodeUiState(
+                id = "node_$index",
+                index = index,
+                name = config.name,
+                server = "${config.serverAddress}:${config.port}",
+                latency = config.latency,
+                isActive = config.uuid == activeUuid, // Compare with current active UUID
+                hasFragment = config.fragmentationEnabled,
+                hasNoise = config.noiseEnabled,
+                mtu = config.mtu,
+                config = config
+            )
         }
     }
     
@@ -150,10 +163,14 @@ fun HomeScreen(
                             onClick = { onNodeClick(node.config.uuid) },
                             onToggle = {
                                 if (node.isActive) {
+                                    // This node is active - deactivate
                                     VpnController.stopVpn(context)
                                     viewModel.setActiveNode(null)
                                 } else {
-                                    connectVpn(activity, node.config, viewModel)
+                                    // Another node - switch to this one
+                                    VpnController.stopVpn(context) // Stop current VPN first
+                                    viewModel.setActiveNode(null) // Clear current active
+                                    connectVpn(activity, node.config, viewModel) // Connect new
                                 }
                             }
                         )
@@ -233,10 +250,12 @@ private fun connectVpn(
     
     val intent = VpnService.prepare(activity)
     if (intent != null) {
+        // Need VPN permission
         VpnController.pendingConfig = config
         VpnController.pendingViewModel = viewModel
         activity.startActivityForResult(intent, 1234)
     } else {
+        // Already have permission - connect directly
         VpnController.startVpn(activity, config)
         viewModel.setActiveNode(config.uuid)
     }
