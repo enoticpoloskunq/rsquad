@@ -5,7 +5,7 @@ import android.content.Intent
 import android.net.VpnService
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -70,10 +70,10 @@ fun HomeScreen(
     val activeUuid by viewModel.activeNodeUuid.collectAsState()
     val importError by viewModel.importError.collectAsState()
     val importCount by viewModel.importCount.collectAsState()
+    val isImporting by viewModel.isImporting.collectAsState()
     
     var showImportDialog by remember { mutableStateOf(false) }
     var importText by remember { mutableStateOf("") }
-    var showDeleteDialog by remember { mutableStateOf<VlessConfig?>(null) }
     var showClearDialog by remember { mutableStateOf(false) }
     
     val clipboardManager = LocalClipboardManager.current
@@ -141,10 +141,10 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    itemsIndexed(
+                    items(
                         items = uiStates,
-                        key = { _, item -> item.id }
-                    ) { _, node ->
+                        key = { it.id }
+                    ) { node ->
                         NodeCard(
                             node = node,
                             onClick = { onNodeClick(node.id) },
@@ -155,8 +155,7 @@ fun HomeScreen(
                                 } else {
                                     connectVpn(activity, node.config, viewModel)
                                 }
-                            },
-                            onDelete = { showDeleteDialog = node.config }
+                            }
                         )
                     }
                     
@@ -168,44 +167,39 @@ fun HomeScreen(
         }
     }
     
+    // Import Dialog with loading
     if (showImportDialog) {
-        ImportDialog(
-            importText = importText,
-            importError = importError,
-            onImportTextChange = { importText = it },
-            onPaste = {
-                val clip = clipboardManager.getText()?.text ?: ""
-                if (clip.isNotEmpty()) importText = clip
-            },
-            onImport = { viewModel.importNodes(importText) },
-            onDismiss = {
-                showImportDialog = false
-                importText = ""
-                viewModel.clearImportError()
-            }
-        )
-    }
-    
-    showDeleteDialog?.let { node ->
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            title = { Text("Удалить?") },
-            text = { Text(node.name) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteNode(node.uuid)
-                        showDeleteDialog = null
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("Удалить") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) { Text("Отмена") }
-            }
-        )
+        if (isImporting) {
+            AlertDialog(
+                onDismissRequest = { },
+                title = { Text("Импорт...") },
+                text = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                },
+                confirmButton = {}
+            )
+        } else {
+            ImportDialog(
+                importText = importText,
+                importError = importError,
+                onImportTextChange = { importText = it },
+                onPaste = {
+                    val clip = clipboardManager.getText()?.text ?: ""
+                    if (clip.isNotEmpty()) importText = clip
+                },
+                onImport = { viewModel.importNodes(importText) },
+                onDismiss = {
+                    showImportDialog = false
+                    importText = ""
+                    viewModel.clearImportError()
+                }
+            )
+        }
     }
     
     if (showClearDialog) {
@@ -350,13 +344,11 @@ fun ImportDialog(
                     label = { Text("VLESS URI или подписка") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp),
-                    maxLines = 5,
+                        .height(100.dp),
+                    maxLines = 4,
                     isError = importError != null,
                     supportingText = importError?.let { { Text(it) } }
                 )
-                
-                Spacer(modifier = Modifier.height(8.dp))
                 
                 TextButton(onClick = onPaste) {
                     Icon(Icons.Default.ContentPaste, null, modifier = Modifier.size(18.dp))
@@ -378,23 +370,15 @@ fun ImportDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NodeCard(
     node: NodeUiState,
     onClick: () -> Unit,
-    onToggle: () -> Unit,
-    onDelete: () -> Unit
+    onToggle: () -> Unit
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (node.isActive)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            else
-                MaterialTheme.colorScheme.surface
-        )
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
@@ -404,39 +388,17 @@ fun NodeCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (node.isActive) "🟢" else "⚪",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        node.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                
+                Text(
+                    text = "${if (node.isActive) "🟢" else "⚪"} ${node.name}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(
                     node.server,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (node.hasFragment) {
-                        Text("🔧", fontSize = 12.sp)
-                    }
-                    if (node.hasNoise) {
-                        Text("📡", fontSize = 12.sp)
-                    }
-                    if (node.mtu != "default") {
-                        Text("📏${node.mtu}", fontSize = 12.sp)
-                    }
-                }
             }
             
             Switch(
