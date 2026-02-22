@@ -33,8 +33,20 @@ class NodeRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             val currentNodes = prefs[nodesKey] ?: "[]"
             val jsonArray = JSONArray(currentNodes)
-            jsonArray.put(configToJson(config))
-            prefs[nodesKey] = jsonArray.toString()
+            
+            // Check for duplicate UUID
+            var exists = false
+            for (i in 0 until jsonArray.length()) {
+                if (jsonArray.getJSONObject(i).getString("uuid") == config.uuid) {
+                    exists = true
+                    break
+                }
+            }
+            
+            if (!exists) {
+                jsonArray.put(configToJson(config))
+                prefs[nodesKey] = jsonArray.toString()
+            }
         }
     }
     
@@ -42,9 +54,21 @@ class NodeRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             val currentNodes = prefs[nodesKey] ?: "[]"
             val jsonArray = JSONArray(currentNodes)
-            configs.forEach { config ->
-                jsonArray.put(configToJson(config))
+            
+            // Get existing UUIDs
+            val existingUuids = mutableSetOf<String>()
+            for (i in 0 until jsonArray.length()) {
+                existingUuids.add(jsonArray.getJSONObject(i).getString("uuid"))
             }
+            
+            // Add only new nodes
+            configs.forEach { config ->
+                if (!existingUuids.contains(config.uuid)) {
+                    jsonArray.put(configToJson(config))
+                    existingUuids.add(config.uuid)
+                }
+            }
+            
             prefs[nodesKey] = jsonArray.toString()
         }
     }
@@ -61,6 +85,11 @@ class NodeRepository(private val context: Context) {
                 }
             }
             prefs[nodesKey] = newArray.toString()
+            
+            // Clear active if this was the active node
+            if (prefs[activeNodeKey] == uuid) {
+                prefs.remove(activeNodeKey)
+            }
         }
     }
     
@@ -79,11 +108,6 @@ class NodeRepository(private val context: Context) {
                 prefs.remove(activeNodeKey)
             }
         }
-    }
-    
-    suspend fun updateNode(config: VlessConfig) {
-        deleteNode(config.uuid)
-        addNode(config)
     }
     
     fun parseMultiple(uriText: String): List<VlessConfig> {
