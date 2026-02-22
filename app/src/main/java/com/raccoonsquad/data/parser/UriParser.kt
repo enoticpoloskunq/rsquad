@@ -127,46 +127,41 @@ object UriParser {
      * Generate VLESS URI from config
      */
     fun generateUri(config: VlessConfig): String {
-        val uri = Uri.Builder()
-            .scheme("vless")
-            .encodedUserInfo(config.uuid)
-            .encodedAuthority("${config.serverAddress}:${config.port}")
+        val queryParams = mutableListOf<String>()
         
         // Security
-        uri.appendQueryParameter("security", config.securityMode.name.lowercase())
-        uri.appendQueryParameter("type", "tcp")
+        queryParams.add("security=${config.securityMode.name.lowercase()}")
+        queryParams.add("type=tcp")
         
         if (config.sni.isNotEmpty()) {
-            uri.appendQueryParameter("sni", config.sni)
+            queryParams.add("sni=${config.sni}")
         }
         
         // Reality
         if (config.securityMode == SecurityMode.REALITY) {
             if (config.realityPublicKey.isNotEmpty()) {
-                uri.appendQueryParameter("pbk", config.realityPublicKey)
+                queryParams.add("pbk=${config.realityPublicKey}")
             }
             if (config.realityShortId.isNotEmpty()) {
-                uri.appendQueryParameter("sid", config.realityShortId)
+                queryParams.add("sid=${config.realityShortId}")
             }
-            uri.appendQueryParameter("fp", "chrome")
+            queryParams.add("fp=chrome")
         }
         
         // Flow
         if (config.flow != FlowMode.NONE) {
-            uri.appendQueryParameter("flow", config.flow.name.lowercase().replace("_", "-"))
+            queryParams.add("flow=${config.flow.name.lowercase().replace("_", "-")}")
         }
         
         // Fragmentation - NekoBox format
         if (config.fragmentationEnabled) {
-            uri.appendQueryParameter(
-                "fragment",
-                "${config.fragmentationPackets},${config.fragmentationLength}"
-            )
+            queryParams.add("fragment=${config.fragmentationPackets},${config.fragmentationLength}")
         }
         
-        // Fragment
-        uri.fragment(config.name)
+        // Build URI manually
+        val query = if (queryParams.isNotEmpty()) "?${queryParams.joinToString("&")}" else ""
+        val fragment = if (config.name.isNotEmpty()) "#${Uri.encode(config.name)}" else ""
         
-        return uri.build().toString()
+        return "vless://${config.uuid}@${config.serverAddress}:${config.port}$query$fragment"
     }
 }
