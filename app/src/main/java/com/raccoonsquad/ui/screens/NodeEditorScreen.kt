@@ -106,7 +106,7 @@ fun NodeEditorScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             
-            HorizontalDivider()
+            Divider()
             
             // Reality Section
             Text("Reality", style = MaterialTheme.typography.titleMedium)
@@ -125,7 +125,7 @@ fun NodeEditorScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             
-            HorizontalDivider()
+            Divider()
             
             // Fragmentation Section
             Text("Fragmentation", style = MaterialTheme.typography.titleMedium)
@@ -158,7 +158,7 @@ fun NodeEditorScreen(
                 }
             }
             
-            HorizontalDivider()
+            Divider()
             
             // Socket Section
             Text("Socket Options", style = MaterialTheme.typography.titleMedium)
