@@ -2,10 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
   build:
@@ -23,10 +22,21 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
-        gradle-version: '8.5'
+        gradle-version: 8.5
+    
+    - name: Download libv2ray.aar
+      run: |
+        mkdir -p app/libs
+        # Download latest libv2ray.aar from AndroidLibXrayLite releases
+        curl -L -o app/libs/libv2ray.aar \
+          "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
+        echo "Downloaded libv2ray.aar: $(ls -lh app/libs/)"
+    
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
     
     - name: Build Debug APK
-      run: gradle assembleDebug --no-daemon --stacktrace
+      run: gradle assembleDebug --no-daemon
     
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
