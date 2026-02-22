@@ -6,7 +6,7 @@ import android.net.VpnService
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -90,7 +90,9 @@ fun HomeScreen(
     }
     
     val uiStates = remember(nodes, activeUuid) {
-        nodes.map { viewModel.toUiState(it, activeUuid) }
+        nodes.mapIndexed { index, config -> 
+            viewModel.toUiState(config, activeUuid, index)
+        }
     }
     
     val activeNode = uiStates.find { it.isActive }
@@ -139,13 +141,13 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = uiStates,
-                        key = { it.id }
-                    ) { node ->
+                        key = { index, _ -> "node_$index" }
+                    ) { _, node ->
                         NodeCard(
                             node = node,
-                            onClick = { onNodeClick(node.id) },
+                            onClick = { onNodeClick(node.config.uuid) },
                             onToggle = {
                                 if (node.isActive) {
                                     VpnController.stopVpn(context)
