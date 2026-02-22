@@ -1,5 +1,8 @@
 package com.raccoonsquad.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.net.VpnService
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,12 +13,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.raccoonsquad.core.vpn.RaccoonVpnService
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
+
+private const val VPN_REQUEST_CODE = 1000
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,14 +30,17 @@ fun HomeScreen(
     onAddNode: () -> Unit,
     onNodeClick: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val nodes by viewModel.nodes.collectAsState()
     val activeUuid by viewModel.activeNodeUuid.collectAsState()
     val importError by viewModel.importError.collectAsState()
-    val lastImported by viewModel.lastImportedNode.collectAsState()
+    val importCount by viewModel.importCount.collectAsState()
     
     var showImportDialog by remember { mutableStateOf(false) }
     var importText by remember { mutableStateOf("") }
     var showDeleteDialog by remember { mutableStateOf<VlessConfig?>(null) }
+    var showClearDialog by remember { mutableStateOf(false) }
+    var pendingVpnConfig by remember { mutableStateOf<VlessConfig?>(null) }
     
     val clipboardManager = LocalClipboardManager.current
     
@@ -45,12 +54,14 @@ fun HomeScreen(
         }
     }
     
-    // Show success message
-    LaunchedEffect(lastImported) {
-        if (lastImported != null) {
+    // Show success snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(importCount) {
+        if (importCount > 0) {
+            snackbarHostState.showSnackbar("Импортировано ${importCount} нод")
+            viewModel.resetImportCount()
             showImportDialog = false
             importText = ""
-            viewModel.clearLastImported()
         }
     }
     
@@ -58,47 +69,80 @@ fun HomeScreen(
         nodes.map { viewModel.toUiState(it, activeUuid) }
     }
     
+    val activeNode = uiStates.find { it.isActive }
+    
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("🦝 Raccoon Squad") },
                 actions = {
                     IconButton(onClick = { showImportDialog = true }) {
-                        Icon(Icons.Default.Add, "Import node")
+                        Icon(Icons.Default.Add, "Import")
+                    }
+                    IconButton(onClick = { showClearDialog = true }) {
+                        Icon(Icons.Default.DeleteSweep, "Clear all")
                     }
                 }
             )
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showImportDialog = true },
-                icon = { Icon(Icons.Default.Add, null) },
-                text = { Text("Add Node") }
-            )
-        }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        if (uiStates.isEmpty()) {
-            EmptyState(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(uiStates, key = { it.id }) { node ->
-                    NodeCard(
-                        node = node,
-                        onClick = { onNodeClick(node.id) },
-                        onToggle = { 
-                            viewModel.setActiveNode(if (node.isActive) null else node.id)
-                        },
-                        onDelete = { showDeleteDialog = node.config }
-                    )
+        Column(modifier = Modifier.padding(padding)) {
+            // VPN Status Card
+            if (activeNode != null) {
+                VpnStatusCard(
+                    node = activeNode,
+                    onDisconnect = { viewModel.setActiveNode(null) }
+                )
+            } else if (uiStates.isNotEmpty()) {
+                VpnDisabledCard(
+                    hasNodes = uiStates.isNotEmpty(),
+                    onConnect = {
+                        // Will connect to first node
+                        pendingVpnConfig = uiStates.firstOrNull()?.config
+                    }
+                )
+            }
+            
+            // Nodes list
+            if (uiStates.isEmpty()) {
+                EmptyState(modifier = Modifier.fillMaxSize())
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(uiStates, key = { it.id }) { node ->
+                        NodeCard(
+                            node = node,
+                            onClick = { onNodeClick(node.id) },
+                            onToggle = {
+                                if (node.isActive) {
+                                    viewModel.setActiveNode(null)
+                                } else {
+                                    pendingVpnConfig = node.config
+                                }
+                            },
+                            onDelete = { showDeleteDialog = node.config }
+                        )
+                    }
                 }
+            }
+        }
+    }
+    
+    // VPN Permission Request
+    LaunchedEffect(pendingVpnConfig) {
+        pendingVpnConfig?.let { config ->
+            val intent = VpnService.prepare(context)
+            if (intent != null) {
+                // Need permission - will handle in callback
+                (context as? Activity)?.startActivityForResult(intent, VPN_REQUEST_CODE)
+            } else {
+                // Already have permission, start VPN
+                startVpn(context, config)
+                viewModel.setActiveNode(config.uuid)
+                pendingVpnConfig = null
             }
         }
     }
@@ -110,17 +154,17 @@ fun HomeScreen(
                 showImportDialog = false
                 viewModel.clearImportError()
             },
-            title = { Text("Import VLESS URI") },
+            title = { Text("Импорт VLESS") },
             text = {
                 Column {
                     OutlinedTextField(
                         value = importText,
                         onValueChange = { importText = it },
-                        label = { Text("vless://...") },
+                        label = { Text("VLESS URI или подписка") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(150.dp),
-                        maxLines = 5,
+                        maxLines = 10,
                         isError = importError != null,
                         supportingText = importError?.let { { Text(it) } }
                     )
@@ -129,38 +173,28 @@ fun HomeScreen(
                     
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TextButton(onClick = {
                             val clip = clipboardManager.getText()?.text ?: ""
-                            if (clip.startsWith("vless://")) {
+                            if (clip.isNotEmpty()) {
                                 importText = clip
                             }
                         }) {
                             Icon(Icons.Default.ContentPaste, null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Paste")
-                        }
-                        
-                        if (importText.startsWith("vless://")) {
-                            TextButton(onClick = {
-                                viewModel.importNode(importText)
-                            }) {
-                                Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Import")
-                            }
+                            Text("Вставить")
                         }
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (importText.startsWith("vless://")) {
-                        viewModel.importNode(importText)
+                    if (importText.isNotEmpty()) {
+                        viewModel.importNodes(importText)
                     }
                 }) {
-                    Text("Import")
+                    Text("Импорт")
                 }
             },
             dismissButton = {
@@ -169,7 +203,7 @@ fun HomeScreen(
                     importText = ""
                     viewModel.clearImportError()
                 }) {
-                    Text("Cancel")
+                    Text("Отмена")
                 }
             }
         )
@@ -179,8 +213,8 @@ fun HomeScreen(
     showDeleteDialog?.let { node ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            title = { Text("Delete node?") },
-            text = { Text("Delete \"${node.name}\"?") },
+            title = { Text("Удалить ноду?") },
+            text = { Text("«${node.name}» будет удалена") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -191,12 +225,112 @@ fun HomeScreen(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("Delete")
+                    Text("Удалить")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = null }) {
-                    Text("Cancel")
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+    
+    // Clear all confirmation
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Очистить все?") },
+            text = { Text("Все ноды (${uiStates.size}) будут удалены") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearAllNodes()
+                        showClearDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Очистить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+}
+
+private fun startVpn(context: android.content.Context, config: VlessConfig) {
+    val intent = Intent(context, RaccoonVpnService::class.java).apply {
+        action = RaccoonVpnService.ACTION_CONNECT
+        putExtra("config", config)
+    }
+    context.startService(intent)
+}
+
+@Composable
+fun VpnStatusCard(
+    node: NodeUiState,
+    onDisconnect: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        ListItem(
+            headlineContent = { 
+                Text("🟢 Подключено") 
+            },
+            supportingContent = { 
+                Text(node.name) 
+            },
+            trailingContent = {
+                Button(
+                    onClick = onDisconnect,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Отключить")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun VpnDisabledCard(
+    hasNodes: Boolean,
+    onConnect: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        ListItem(
+            headlineContent = { 
+                Text("⚪ VPN отключен") 
+            },
+            supportingContent = { 
+                Text(if (hasNodes) "Выберите ноду для подключения" else "Добавьте ноды") 
+            },
+            trailingContent = {
+                if (hasNodes) {
+                    Button(onClick = onConnect) {
+                        Text("Подключить")
+                    }
                 }
             }
         )
@@ -213,11 +347,11 @@ fun EmptyState(modifier: Modifier = Modifier) {
         Text("🦝", style = MaterialTheme.typography.displayLarge)
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            "No nodes yet",
+            "Нет нод",
             style = MaterialTheme.typography.titleLarge
         )
         Text(
-            "Tap + to import a VLESS URI",
+            "Нажмите + для импорта",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -260,7 +394,7 @@ fun NodeCard(
                         }
                         if (node.mtu != "default") {
                             Text(
-                                "📏 MTU ${node.mtu}",
+                                "📏 ${node.mtu}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.tertiary
                             )
@@ -269,24 +403,10 @@ fun NodeCard(
                 }
             },
             trailingContent = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    node.latency?.let { latency ->
-                        Text(
-                            "${latency}ms",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = when {
-                                latency < 100 -> MaterialTheme.colorScheme.primary
-                                latency < 300 -> MaterialTheme.colorScheme.secondary
-                                else -> MaterialTheme.colorScheme.error
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Switch(
-                        checked = node.isActive,
-                        onCheckedChange = { onToggle() }
-                    )
-                }
+                Switch(
+                    checked = node.isActive,
+                    onCheckedChange = { onToggle() }
+                )
             },
             leadingContent = {
                 Text(
