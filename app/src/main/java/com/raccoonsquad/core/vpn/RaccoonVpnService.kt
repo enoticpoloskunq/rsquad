@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -46,8 +47,18 @@ class RaccoonVpnService : VpnService() {
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // CRITICAL: Start foreground IMMEDIATELY to prevent crash on Android 8+
-        startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
+        val notification = createNotification("Connecting...")
+        
+        // CRITICAL: Start foreground IMMEDIATELY with proper type for Android 14+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID, 
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
         
         when (intent?.action) {
             ACTION_CONNECT -> {
