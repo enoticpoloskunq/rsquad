@@ -27,10 +27,17 @@ jobs:
     - name: Download libv2ray.aar
       run: |
         mkdir -p app/libs
-        # Download latest libv2ray.aar from AndroidLibXrayLite releases
+        # ✅ FIXED: Pin specific version instead of 'latest' to avoid breaking changes
+        # Check available versions: https://github.com/2dust/AndroidLibXrayLite/releases
+        LIBV2RAY_VERSION="v1.8.4"
+        
         curl -L -o app/libs/libv2ray.aar \
-          "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
-        echo "Downloaded libv2ray.aar: $(ls -lh app/libs/)"
+          "https://github.com/2dust/AndroidLibXrayLite/releases/download/${LIBV2RAY_VERSION}/libv2ray.aar"
+        
+        # ✅ Optional: Verify SHA256 checksum (find hash on release page)
+        # echo "EXPECTED_HASH_HERE  app/libs/libv2ray.aar" | sha256sum -c - || exit 1
+        
+        echo "✅ Downloaded libv2ray.aar ${LIBV2RAY_VERSION}: $(ls -lh app/libs/libv2ray.aar)"
     
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
