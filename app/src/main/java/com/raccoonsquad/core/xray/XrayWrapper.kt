@@ -230,11 +230,6 @@ object XrayWrapper {
                     put("ip", JSONArray().put("geoip:private"))
                     put("outboundTag", "direct")
                 })
-                // Everything else -> proxy
-                put(JSONObject().apply {
-                    put("type", "field")
-                    put("outboundTag", "proxy")
-                })
             })
         })
         
