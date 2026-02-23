@@ -5,6 +5,7 @@ import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.model.SecurityMode
 import com.raccoonsquad.data.model.FlowMode
 import com.raccoonsquad.core.log.LogManager
+import go.Seq
 import libv2ray.Libv2ray
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
@@ -32,6 +33,10 @@ object XrayWrapper {
         LogManager.flush()
         
         try {
+            // IMPORTANT: Set context for Go mobile bindings
+            Seq.setContext(context.applicationContext)
+            LogManager.d(TAG, "Seq.setContext done")
+            
             val filesDir = context.filesDir.absolutePath
             LogManager.d(TAG, "filesDir: $filesDir")
             
@@ -48,7 +53,8 @@ object XrayWrapper {
             LogManager.i(TAG, "Calling Libv2ray.initCoreEnv...")
             LogManager.flush()
             
-            // API: initCoreEnv(assetsPath, externalAssetsPath)
+            // API: initCoreEnv(assetsPath, deviceId)
+            // deviceId is used for XUDP base key - can be empty or unique
             Libv2ray.initCoreEnv(xrayDir.absolutePath, "")
             
             LogManager.i(TAG, "Libv2ray.initCoreEnv DONE")
@@ -237,10 +243,12 @@ object XrayWrapper {
     
     /**
      * Start Xray with given config
+     * @param configJson Xray config JSON
+     * @param tunFd TUN file descriptor (0 for proxy-only mode)
      */
-    fun start(configJson: String): Boolean {
+    fun start(configJson: String, tunFd: Int = 0): Boolean {
         LogManager.i(TAG, "=== XrayWrapper.start() ===")
-        LogManager.d(TAG, "Config length: ${configJson.length}")
+        LogManager.d(TAG, "Config length: ${configJson.length}, tunFd: $tunFd")
         LogManager.flush()
         
         if (isRunning) {
@@ -254,6 +262,7 @@ object XrayWrapper {
             LogManager.d(TAG, "Creating CoreCallbackHandler...")
             LogManager.flush()
             
+            // Create callback handler - must be a class that extends CoreCallbackHandler
             val callback = object : CoreCallbackHandler() {
                 override fun startup(): Long {
                     LogManager.i(TAG, "Xray core STARTED")
@@ -286,8 +295,8 @@ object XrayWrapper {
             LogManager.i(TAG, "Starting Xray loop...")
             LogManager.flush()
             
-            // startLoop is blocking but runs Xray in background
-            coreController?.startLoop(configJson, 0)
+            // startLoop(configJson, tunFd) - tunFd = 0 for proxy mode
+            coreController?.startLoop(configJson, tunFd)
             
             isRunning = true
             LogManager.i(TAG, "=== XrayWrapper.start() SUCCESS ===")

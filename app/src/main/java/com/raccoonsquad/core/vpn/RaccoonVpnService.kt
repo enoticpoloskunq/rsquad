@@ -168,12 +168,12 @@ class RaccoonVpnService : VpnService() {
             LogManager.i(TAG, "VPN established fd=${vpnInterface!!.fd}")
             LogManager.flush()
             
-            // Start Xray
-            LogManager.i(TAG, "Starting Xray...")
+            // Start Xray with VPN TUN fd
+            LogManager.i(TAG, "Starting Xray with tunFd=${vpnInterface!!.fd}...")
             LogManager.flush()
             
             val started = try {
-                XrayWrapper.start(xrayConfig)
+                XrayWrapper.start(xrayConfig, vpnInterface!!.fd)
             } catch (e: Throwable) {
                 LogManager.e(TAG, "XRAY START CRASHED", e)
                 LogManager.flush()
