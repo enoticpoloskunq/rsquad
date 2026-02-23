@@ -18,11 +18,6 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        
-        // Only include necessary ABIs (reduces size from 150MB to ~40MB per APK)
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-        }
     }
 
     buildTypes {
@@ -72,27 +67,12 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            // Exclude unnecessary files
             excludes += "/META-INF/DEPENDENCIES"
             excludes += "/META-INF/LICENSE"
             excludes += "/META-INF/LICENSE.txt"
             excludes += "/META-INF/NOTICE"
             excludes += "/META-INF/NOTICE.txt"
         }
-        
-        // Exclude x86 and x86_64 from libv2ray.aar (only keep ARM)
-        jniLibs {
-            excludes += setOf(
-                "lib/x86/libgojni.so",
-                "lib/x86_64/libgojni.so"
-            )
-        }
-    }
-    
-    // Optimize resources
-    androidResources {
-        // Ignore unused densities
-        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
 }
 
