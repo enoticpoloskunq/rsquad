@@ -47,8 +47,7 @@ object XrayWrapper {
      */
     fun generateConfig(config: VlessConfig): String {
         val json = JSONObject()
-        
-        // Log
+                // Log
         json.put("log", JSONObject().put("loglevel", "warning"))
         
         // Inbounds
@@ -97,8 +96,7 @@ object XrayWrapper {
                                 else -> ""
                             })
                         }
-                    }))
-                }))
+                    }))                }))
             })
             put("streamSettings", JSONObject().apply {
                 put("network", "tcp")
@@ -147,8 +145,7 @@ object XrayWrapper {
         })
         
         // Direct outbound
-        outbounds.put(JSONObject().apply {
-            put("tag", "direct")
+        outbounds.put(JSONObject().apply {            put("tag", "direct")
             put("protocol", "freedom")
         })
         
@@ -188,20 +185,20 @@ object XrayWrapper {
         try {
             currentConfig = configJson
             
-            // Create callback handler
+            // ✅ FIXED: Correct method signatures for CoreCallbackHandler (gomobile binding)
             val callback = object : CoreCallbackHandler() {
-                override fun Startup(): Long {
+                override fun startup(): Long {
                     Log.i(TAG, "Xray core started")
                     return 0
                 }
                 
-                override fun Shutdown(): Long {
+                override fun shutdown(): Long {
                     Log.i(TAG, "Xray core shutdown")
-                    return 0
-                }
+                    return 0                }
                 
-                override fun OnEmitStatus(code: Long, message: String): Long {
-                    Log.d(TAG, "Xray status: $code - $message")
+                // Note: p1 is String? because Java String! maps to nullable in Kotlin
+                override fun onEmitStatus(p0: Long, p1: String?): Long {
+                    Log.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
                     return 0
                 }
             }
@@ -210,7 +207,6 @@ object XrayWrapper {
             coreController = Libv2ray.newCoreController(callback)
             
             // Start with config (tunFd = 0 means use SOCKS proxy)
-            // Note: gomobile uses long for int32
             val controller = coreController as? libv2ray.CoreController
             controller?.startLoop(configJson, 0)
             
@@ -247,8 +243,7 @@ object XrayWrapper {
      */
     fun isRunning(): Boolean = isRunning
     
-    /**
-     * Measure latency
+    /**     * Measure latency
      */
     fun measureDelay(url: String = "https://www.google.com/generate_204"): Long {
         if (!isRunning) return -1
