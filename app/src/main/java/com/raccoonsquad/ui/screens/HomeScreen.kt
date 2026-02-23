@@ -501,7 +501,7 @@ fun ImportDialog(
     var url by remember { mutableStateOf("") }
     
     AlertDialog(
-        onDismissRequest = if (isImporting) { {} } else onDismiss,
+        onDismissRequest = onDismiss,
         title = { Text("Импорт VLESS") },
         text = {
             Column {

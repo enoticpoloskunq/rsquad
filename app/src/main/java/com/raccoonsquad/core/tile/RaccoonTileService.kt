@@ -1,5 +1,6 @@
 package com.raccoonsquad.core.tile
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.drawable.Icon
 import android.net.VpnService
@@ -90,7 +91,15 @@ class RaccoonTileService : TileService() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        startActivityAndCollapse(intent)
+        // Use PendingIntent for Android 11+
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent, PendingIntent.FLAG_IMMUTABLE
+        )
+        try {
+            pendingIntent.send()
+        } catch (e: Exception) {
+            LogManager.e(TAG, "Failed to open app", e)
+        }
     }
 
     private fun updateTile() {
