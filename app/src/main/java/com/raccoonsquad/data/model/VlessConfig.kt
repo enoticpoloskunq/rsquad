@@ -63,6 +63,57 @@ data class VlessConfig(
     val fragmentationInterval: String get() = fragmentInterval
     val noisePacketCount: String get() = noisePacketSize
     
+    /**
+     * Display name with cosmetics info
+     */
+    fun getDisplayName(): String {
+        val parts = mutableListOf<String>()
+        
+        // Add fragmentation indicator
+        if (fragmentationEnabled) {
+            parts.add("F")
+        }
+        
+        // Add noise indicator
+        if (noiseEnabled) {
+            parts.add("N")
+        }
+        
+        // Build name
+        val baseName = name.ifEmpty { "$serverAddress:$port" }
+        
+        return if (parts.isNotEmpty()) {
+            "$baseName [${parts.joinToString(", ")}]"
+        } else {
+            baseName
+        }
+    }
+    
+    /**
+     * Short description of cosmetics
+     */
+    fun getCosmeticsInfo(): String {
+        val parts = mutableListOf<String>()
+        
+        if (fragmentationEnabled) {
+            parts.add("frag:${fragmentPackets}")
+        }
+        
+        if (noiseEnabled) {
+            parts.add("noise:${noiseType}")
+        }
+        
+        if (mtu != "1500") {
+            parts.add("mtu:$mtu")
+        }
+        
+        if (flow != FlowMode.NONE) {
+            parts.add(flow.name.lowercase().replace("_", "-"))
+        }
+        
+        return if (parts.isNotEmpty()) parts.joinToString(", ") else "no cosmetics"
+    }
+    
     constructor(parcel: Parcel) : this(
         uuid = parcel.readString() ?: "",
         serverAddress = parcel.readString() ?: "",

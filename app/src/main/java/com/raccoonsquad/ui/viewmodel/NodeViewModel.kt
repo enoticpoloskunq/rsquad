@@ -19,6 +19,7 @@ data class NodeUiState(
     val index: Int,
     val name: String,
     val server: String,
+    val cosmetics: String = "",
     val latency: Long?,
     val isActive: Boolean,
     val hasFragment: Boolean,
@@ -122,8 +123,9 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         return NodeUiState(
             id = "${config.uuid}_$index",
             index = index,
-            name = config.name,
+            name = config.getDisplayName(),
             server = "${config.serverAddress}:${config.port}",
+            cosmetics = config.getCosmeticsInfo(),
             latency = config.latency,
             isActive = config.uuid == activeUuid,
             hasFragment = config.fragmentationEnabled,

@@ -96,10 +96,11 @@ fun HomeScreen(
             NodeUiState(
                 id = "node_$index",
                 index = index,
-                name = config.name,
+                name = config.getDisplayName(),
                 server = "${config.serverAddress}:${config.port}",
+                cosmetics = config.getCosmeticsInfo(),
                 latency = config.latency,
-                isActive = config.uuid == activeUuid, // Compare with current active UUID
+                isActive = config.uuid == activeUuid,
                 hasFragment = config.fragmentationEnabled,
                 hasNoise = config.noiseEnabled,
                 mtu = config.mtu,
@@ -418,6 +419,14 @@ fun NodeCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Show cosmetics info
+                if (node.cosmetics.isNotEmpty() && node.cosmetics != "no cosmetics") {
+                    Text(
+                        text = node.cosmetics,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
             
             Switch(
