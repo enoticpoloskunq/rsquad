@@ -185,8 +185,8 @@ object XrayWrapper {
         try {
             currentConfig = configJson
             
-            // ✅ FIXED: Correct method signatures for CoreCallbackHandler (gomobile binding)
-            val callback = object : CoreCallbackHandler() {
+            // ✅ FIXED: CoreCallbackHandler is now an interface in v26.2.6 (no parentheses)
+            val callback = object : CoreCallbackHandler {
                 override fun startup(): Long {
                     Log.i(TAG, "Xray core started")
                     return 0
