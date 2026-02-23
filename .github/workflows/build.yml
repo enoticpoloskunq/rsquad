@@ -34,11 +34,8 @@ jobs:
         echo "Downloaded libv2ray.aar:"
         ls -lh app/libs/
     
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    
     - name: Build Debug APKs
-      run: ./gradlew assembleDebug --no-daemon
+      run: gradle assembleDebug --no-daemon
     
     - name: Upload arm64-v8a Debug APK
       uses: actions/upload-artifact@v4
@@ -53,7 +50,7 @@ jobs:
         path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
     
     - name: Build Release APKs
-      run: ./gradlew assembleRelease --no-daemon
+      run: gradle assembleRelease --no-daemon
     
     - name: Upload arm64-v8a Release APK
       uses: actions/upload-artifact@v4
