@@ -29,7 +29,7 @@ jobs:
         mkdir -p app/libs
         # ✅ FIXED: Pin specific version instead of 'latest' to avoid breaking changes
         # Check available versions: https://github.com/2dust/AndroidLibXrayLite/releases
-        LIBV2RAY_VERSION="v1.8.4"
+        LIBV2RAY_VERSION="v26.2.6"
         
         curl -L -o app/libs/libv2ray.aar \
           "https://github.com/2dust/AndroidLibXrayLite/releases/download/${LIBV2RAY_VERSION}/libv2ray.aar"
