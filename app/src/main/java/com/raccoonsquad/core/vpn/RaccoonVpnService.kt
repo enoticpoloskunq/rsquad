@@ -99,29 +99,30 @@ class RaccoonVpnService : VpnService() {
         LogManager.i(TAG, "=== connect() ===")
         LogManager.flush()
         
-        if (isActive) {
-            LogManager.w(TAG, "Already active, disconnecting first")
-            disconnect()
-        }
-        
         currentConfig = config
         
+        // If already running, just switch Xray config (keep VPN interface)
+        val isSwitching = isActive && vpnInterface != null
+        
+        if (isSwitching) {
+            LogManager.i(TAG, "Switching to new config (keeping VPN interface)...")
+            try {
+                XrayWrapper.stop()
+                Thread.sleep(100) // Wait for Xray to stop
+            } catch (e: Throwable) {
+                LogManager.e(TAG, "Error stopping Xray during switch", e)
+            }
+        }
+        
         try {
-            // Init Xray LAZILY
+            // Init Xray if needed
             if (!xrayInitialized) {
                 LogManager.i(TAG, "Initializing Xray...")
                 LogManager.flush()
                 
-                try {
-                    XrayWrapper.init(applicationContext)
-                    xrayInitialized = true
-                    LogManager.i(TAG, "Xray initialized OK")
-                } catch (e: Throwable) {
-                    LogManager.e(TAG, "XRAY INIT CRASHED", e)
-                    LogManager.flush()
-                    disconnect()
-                    return
-                }
+                XrayWrapper.init(applicationContext)
+                xrayInitialized = true
+                LogManager.i(TAG, "Xray initialized OK")
             }
             LogManager.flush()
             
@@ -131,41 +132,44 @@ class RaccoonVpnService : VpnService() {
             
             val xrayConfig = XrayWrapper.generateConfig(config)
             LogManager.d(TAG, "Config generated: ${xrayConfig.length} bytes")
-            LogManager.d(TAG, "Config preview: ${xrayConfig.take(200)}...")
             LogManager.flush()
             
-            // Build VPN interface
-            val mtu = config.mtu.toIntOrNull() ?: RomCompat.getRecommendedMtu()
-            LogManager.i(TAG, "Building VPN interface (MTU=$mtu)...")
-            LogManager.flush()
-            
-            val builder = Builder()
-                .setSession("Raccoon VPN")
-                .setMtu(mtu)
-                .addAddress("10.66.66.1", 24)
-                .addRoute("0.0.0.0", 0)
-                .addDnsServer("8.8.8.8")
-                .addDnsServer("1.1.1.1")
-            
-            try {
-                builder.addDisallowedApplication(packageName)
-            } catch (e: Throwable) {
-                LogManager.w(TAG, "Could not exclude self from VPN")
-            }
-            
-            LogManager.d(TAG, "Establishing VPN interface...")
-            LogManager.flush()
-            
-            vpnInterface = builder.establish()
-            
-            if (vpnInterface == null) {
-                LogManager.e(TAG, "VPN interface is NULL! VPN permission revoked?")
+            // Build VPN interface only if not switching
+            if (!isSwitching) {
+                val mtu = config.mtu.toIntOrNull() ?: RomCompat.getRecommendedMtu()
+                LogManager.i(TAG, "Building VPN interface (MTU=$mtu)...")
                 LogManager.flush()
-                disconnect()
-                return
+                
+                val builder = Builder()
+                    .setSession("Raccoon VPN")
+                    .setMtu(mtu)
+                    .addAddress("10.66.66.1", 24)
+                    .addRoute("0.0.0.0", 0)
+                    .addDnsServer("8.8.8.8")
+                    .addDnsServer("1.1.1.1")
+                
+                try {
+                    builder.addDisallowedApplication(packageName)
+                } catch (e: Throwable) {
+                    LogManager.w(TAG, "Could not exclude self from VPN")
+                }
+                
+                LogManager.d(TAG, "Establishing VPN interface...")
+                LogManager.flush()
+                
+                vpnInterface = builder.establish()
+                
+                if (vpnInterface == null) {
+                    LogManager.e(TAG, "VPN interface is NULL! VPN permission revoked?")
+                    LogManager.flush()
+                    disconnect()
+                    return
+                }
+                
+                LogManager.i(TAG, "VPN established fd=${vpnInterface!!.fd}")
+            } else {
+                LogManager.i(TAG, "Reusing existing VPN interface fd=${vpnInterface!!.fd}")
             }
-            
-            LogManager.i(TAG, "VPN established fd=${vpnInterface!!.fd}")
             LogManager.flush()
             
             // Start Xray with VPN TUN fd
@@ -197,7 +201,7 @@ class RaccoonVpnService : VpnService() {
                 LogManager.w(TAG, "Could not update notification")
             }
             
-            LogManager.i(TAG, "=== VPN CONNECTED (Xray proxy mode on :10808) ===")
+            LogManager.i(TAG, "=== VPN CONNECTED ===")
             LogManager.flush()
             
         } catch (e: Throwable) {

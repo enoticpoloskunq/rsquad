@@ -110,7 +110,8 @@ fun HomeScreen(
     }
     
     val activeNode = uiStates.find { it.isActive }
-    val isVpnActive = RaccoonVpnService.isActive
+    // VPN is active if there's an active node UUID
+    val isVpnActive = activeUuid != null
     
     Scaffold(
         topBar = {
@@ -164,14 +165,12 @@ fun HomeScreen(
                             onClick = { onNodeClick(node.config.uuid) },
                             onToggle = {
                                 if (node.isActive) {
-                                    // This node is active - deactivate
+                                    // This node is active - disconnect
                                     VpnController.stopVpn(context)
                                     viewModel.setActiveNode(null)
                                 } else {
-                                    // Another node - switch to this one
-                                    VpnController.stopVpn(context) // Stop current VPN first
-                                    viewModel.setActiveNode(null) // Clear current active
-                                    connectVpn(activity, node.config, viewModel) // Connect new
+                                    // Switch to this node - just connect (will stop old one)
+                                    connectVpn(activity, node.config, viewModel)
                                 }
                             }
                         )
