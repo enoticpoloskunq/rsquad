@@ -47,7 +47,7 @@ class RaccoonTileService : TileService() {
         
         if (lastUuid != null) {
             val repository = NodeRepository.getInstance(this)
-            val nodes = repository.getNodes()
+            val nodes = repository.getNodesSync()
             val node = nodes.find { it.uuid == lastUuid }
             
             if (node != null) {

@@ -133,7 +133,7 @@ fun HomeScreen(
     var totalUpload by remember { mutableStateOf(0L) }
     
     // Update traffic stats
-    LaunchedEffect(isVpnActive) {
+    DisposableEffect(isVpnActive) {
         if (isVpnActive) {
             val listener: (Long, Long, Long, Long) -> Unit = { rx, tx, rxTotal, txTotal ->
                 downloadSpeed = rx
@@ -142,8 +142,9 @@ fun HomeScreen(
                 totalUpload = txTotal
             }
             TrafficStats.addListener(listener)
-            awaitDispose { TrafficStats.removeListener(listener) }
+            onDispose { TrafficStats.removeListener(listener) }
         }
+        onDispose { }
     }
     
     LaunchedEffect(importCount) {
