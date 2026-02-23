@@ -28,6 +28,10 @@ import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
 
+enum class SortOrder {
+    FAVORITES_FIRST, NAME_ASC, NAME_DESC, PING_ASC, PING_DESC
+}
+
 object VpnController {
     var pendingConfig: VlessConfig? = null
     var pendingViewModel: NodeViewModel? = null
@@ -82,14 +86,17 @@ fun HomeScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
     var showTestDialog by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    
+    var sortOrder by remember { mutableStateOf(SortOrder.FAVORITES_FIRST) }
     
     val clipboardManager = LocalClipboardManager.current
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Create UI states with proper active state, sorted by favorite
-    val uiStates = remember(nodes, activeUuid, testResults) {
-        nodes.mapIndexed { index, config -> 
+    // Create UI states with proper active state, sorted
+    val uiStates = remember(nodes, activeUuid, testResults, sortOrder) {
+        val list = nodes.mapIndexed { index, config -> 
             NodeUiState(
                 id = "node_$index",
                 index = index,
@@ -104,7 +111,15 @@ fun HomeScreen(
                 isFavorite = config.isFavorite,
                 config = config
             )
-        }.sortedByDescending { it.isFavorite } // Favorites first
+        }
+        
+        when (sortOrder) {
+            SortOrder.FAVORITES_FIRST -> list.sortedByDescending { it.isFavorite }
+            SortOrder.NAME_ASC -> list.sortedBy { it.name.lowercase() }
+            SortOrder.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
+            SortOrder.PING_ASC -> list.sortedBy { it.latency ?: Long.MAX_VALUE }
+            SortOrder.PING_DESC -> list.sortedByDescending { it.latency ?: Long.MIN_VALUE }
+        }
     }
     
     val activeNode = uiStates.find { it.isActive }
@@ -150,6 +165,53 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text(if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad") },
                 actions = {
+                    if (uiStates.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                Icon(Icons.Default.Sort, "Sort")
+                            }
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("⭐ Избранное") },
+                                    onClick = {
+                                        sortOrder = SortOrder.FAVORITES_FIRST
+                                        showSortMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("А-Я ↑") },
+                                    onClick = {
+                                        sortOrder = SortOrder.NAME_ASC
+                                        showSortMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Я-А ↓") },
+                                    onClick = {
+                                        sortOrder = SortOrder.NAME_DESC
+                                        showSortMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Пинг ↑") },
+                                    onClick = {
+                                        sortOrder = SortOrder.PING_ASC
+                                        showSortMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Пинг ↓") },
+                                    onClick = {
+                                        sortOrder = SortOrder.PING_DESC
+                                        showSortMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                     IconButton(onClick = { showImportDialog = true }) {
                         Icon(Icons.Default.Add, "Import")
                     }
