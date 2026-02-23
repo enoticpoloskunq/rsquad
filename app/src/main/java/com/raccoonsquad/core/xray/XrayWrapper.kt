@@ -259,31 +259,10 @@ object XrayWrapper {
         try {
             currentConfig = configJson
             
-            LogManager.d(TAG, "Creating CoreCallbackHandler...")
-            LogManager.flush()
-            
-            // Create callback handler - must be a class that extends CoreCallbackHandler
-            val callback = object : CoreCallbackHandler() {
-                override fun startup(): Long {
-                    LogManager.i(TAG, "Xray core STARTED")
-                    return 0
-                }
-                
-                override fun shutdown(): Long {
-                    LogManager.i(TAG, "Xray core SHUTDOWN")
-                    return 0
-                }
-                
-                override fun onEmitStatus(p0: Long, p1: String?): Long {
-                    LogManager.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
-                    return 0
-                }
-            }
-            
             LogManager.d(TAG, "Creating CoreController...")
             LogManager.flush()
             
-            coreController = Libv2ray.newCoreController(callback)
+            coreController = Libv2ray.newCoreController(CoreCallback)
             
             if (coreController == null) {
                 LogManager.e(TAG, "CoreController is NULL!")
@@ -330,4 +309,26 @@ object XrayWrapper {
     }
     
     fun isRunning(): Boolean = isRunning
+}
+
+/**
+ * Core callback handler implementation for Xray core events
+ */
+private object CoreCallback : CoreCallbackHandler {
+    private const val TAG = "XrayCallback"
+    
+    override fun startup(): Long {
+        LogManager.i(TAG, "Xray core STARTED")
+        return 0
+    }
+    
+    override fun shutdown(): Long {
+        LogManager.i(TAG, "Xray core SHUTDOWN")
+        return 0
+    }
+    
+    override fun onEmitStatus(p0: Long, p1: String?): Long {
+        LogManager.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
+        return 0
+    }
 }
