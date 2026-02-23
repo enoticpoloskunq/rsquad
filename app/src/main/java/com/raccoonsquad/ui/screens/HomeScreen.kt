@@ -87,6 +87,7 @@ fun HomeScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showTestDialog by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
+    var showCosmeticDialog by remember { mutableStateOf(false) }
     
     var sortOrder by remember { mutableStateOf(SortOrder.FAVORITES_FIRST) }
     
@@ -229,6 +230,9 @@ fun HomeScreen(
                         Icon(Icons.Default.Add, "Import")
                     }
                     if (uiStates.isNotEmpty()) {
+                        IconButton(onClick = { showCosmeticDialog = true }) {
+                            Icon(Icons.Default.AutoFixHigh, "Cosmetics")
+                        }
                         IconButton(onClick = { showTestDialog = true }) {
                             Icon(Icons.Default.Speed, "Test")
                         }
@@ -352,6 +356,21 @@ fun HomeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
+            }
+        )
+    }
+    
+    // Cosmetic Dialog
+    if (showCosmeticDialog) {
+        CosmeticDialog(
+            onDismiss = { showCosmeticDialog = false },
+            onApplyPreset = { presetId ->
+                viewModel.applyPresetToAll(presetId)
+                showCosmeticDialog = false
+            },
+            onRandomize = {
+                viewModel.randomizeAllCosmetics()
+                showCosmeticDialog = false
             }
         )
     }
@@ -778,4 +797,89 @@ fun NodeCard(
             }
         }
     }
+}
+
+@Composable
+fun CosmeticDialog(
+    onDismiss: () -> Unit,
+    onApplyPreset: (String) -> Unit,
+    onRandomize: () -> Unit
+) {
+    val presets = listOf(
+        Triple("minimal", "🛡️ Минимальная", "Без маскировки"),
+        Triple("mobile", "📱 Для мобильных", "Оптимизация для мобильных сетей"),
+        Triple("tspu", "🚫 Против ТСПУ", "Обход DPI России"),
+        Triple("maximum", "🔥 Максимальный", "Максимальная маскировка")
+    )
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("🎨 Косметика для нод") },
+        text = {
+            Column {
+                Text(
+                    "Применить ко всем нодам:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                presets.forEach { (id, name, desc) ->
+                    TextButton(
+                        onClick = { onApplyPreset(id) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                desc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                Text(
+                    "Рандомизация против ИИ-анализа:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Button(
+                    onClick = onRandomize,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                ) {
+                    Icon(Icons.Default.Shuffle, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🎲 Рандомизировать все")
+                }
+                
+                Text(
+                    "Каждая нода получит уникальные случайные настройки",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Закрыть")
+            }
+        }
+    )
 }

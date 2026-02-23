@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.raccoonsquad.core.util.NodeTester
+import com.raccoonsquad.core.cosmetic.CosmeticPresets
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.repository.NodeRepository
 import com.raccoonsquad.data.parser.UriParser
@@ -219,6 +220,56 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleFavorite(uuid: String) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.toggleFavorite(uuid)
+        }
+    }
+    
+    /**
+     * Apply cosmetic preset to a single node
+     */
+    fun applyPreset(uuid: String, presetId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allNodes = nodes.value
+            val node = allNodes.find { it.uuid == uuid } ?: return@launch
+            val updated = CosmeticPresets.applyPreset(presetId, node)
+            repository.updateNode(updated)
+        }
+    }
+    
+    /**
+     * Apply cosmetic preset to all nodes
+     */
+    fun applyPresetToAll(presetId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allNodes = nodes.value
+            allNodes.forEach { node ->
+                val updated = CosmeticPresets.applyPreset(presetId, node)
+                repository.updateNode(updated)
+            }
+        }
+    }
+    
+    /**
+     * Randomize cosmetics for a single node
+     */
+    fun randomizeCosmetics(uuid: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allNodes = nodes.value
+            val node = allNodes.find { it.uuid == uuid } ?: return@launch
+            val updated = CosmeticPresets.randomize(node)
+            repository.updateNode(updated)
+        }
+    }
+    
+    /**
+     * Randomize cosmetics for all nodes (each gets unique random settings)
+     */
+    fun randomizeAllCosmetics() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allNodes = nodes.value
+            allNodes.forEach { node ->
+                val updated = CosmeticPresets.randomize(node)
+                repository.updateNode(updated)
+            }
         }
     }
     
