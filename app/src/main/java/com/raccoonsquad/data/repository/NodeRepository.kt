@@ -70,18 +70,9 @@ class NodeRepository(private val context: Context) {
             val currentNodes = prefs[nodesKey] ?: "[]"
             val jsonArray = JSONArray(currentNodes)
             
-            // Get existing UUIDs
-            val existingUuids = mutableSetOf<String>()
-            for (i in 0 until jsonArray.length()) {
-                existingUuids.add(jsonArray.getJSONObject(i).getString("uuid"))
-            }
-            
-            // Add only new nodes
+            // Add all nodes (no deduplication - user wants all)
             configs.forEach { config ->
-                if (!existingUuids.contains(config.uuid)) {
-                    jsonArray.put(configToJson(config))
-                    existingUuids.add(config.uuid)
-                }
+                jsonArray.put(configToJson(config))
             }
             
             prefs[nodesKey] = jsonArray.toString()
