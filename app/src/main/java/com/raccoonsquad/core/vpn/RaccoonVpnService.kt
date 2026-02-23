@@ -197,6 +197,20 @@ class RaccoonVpnService : VpnService() {
             // Start traffic tracking
             TrafficStats.startTracking(applicationInfo.uid)
             
+            // Add listener to update notification with stats
+            TrafficStats.addListener { _, _, _, _ ->
+                try {
+                    updateNotificationWithStats(
+                        TrafficStats.downloadSpeedFormatted,
+                        TrafficStats.uploadSpeedFormatted,
+                        TrafficStats.totalDownloadedFormatted,
+                        TrafficStats.totalUploadedFormatted
+                    )
+                } catch (e: Throwable) {
+                    // Ignore
+                }
+            }
+            
             // Save last connected UUID for tile
             try {
                 val sharedPrefs = getSharedPreferences("raccoon_prefs", MODE_PRIVATE)
@@ -272,14 +286,48 @@ class RaccoonVpnService : VpnService() {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
         
+        // Disconnect action
+        val disconnectIntent = Intent(this, RaccoonVpnService::class.java).apply {
+            action = ACTION_DISCONNECT
+        }
+        val disconnectPendingIntent = PendingIntent.getService(
+            this, 1, disconnectIntent, PendingIntent.FLAG_IMMUTABLE
+        )
+        
         return androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🦝 Raccoon Squad")
-            .setContentText(nodeName)
+            .setContentTitle("🦝 $nodeName")
+            .setContentText("VPN активен • Нажмите для открытия")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setSilent(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
+            .addAction(
+                R.drawable.ic_launcher_foreground,
+                "Отключить",
+                disconnectPendingIntent
+            )
             .build()
+    }
+    
+    fun updateNotificationWithStats(downloadSpeed: String, uploadSpeed: String, totalDownload: String, totalUpload: String) {
+        try {
+            val notification = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("🦝 ${currentConfig?.name ?: "VPN"}")
+                .setContentText("↓ $downloadSpeed  ↑ $uploadSpeed")
+                .setSubText("Всего: ↓$totalDownload ↑$totalUpload")
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
+                .setOngoing(true)
+                .setSilent(true)
+                .build()
+            
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.notify(NOTIFICATION_ID, notification)
+        } catch (e: Throwable) {
+            LogManager.w(TAG, "Could not update notification with stats")
+        }
     }
     
     override fun onDestroy() {
