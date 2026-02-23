@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Cache directory for sharing crash logs -->
+    <cache-path name="cache" path="." />
+    <!-- Internal files directory -->
+    <files-path name="files" path="." />
+</paths>

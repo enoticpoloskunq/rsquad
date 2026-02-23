@@ -1,27 +1,29 @@
 package com.raccoonsquad.core.xray
 
 import android.content.Context
-import android.util.Log
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.model.SecurityMode
 import com.raccoonsquad.data.model.FlowMode
 import com.raccoonsquad.core.log.LogManager
-import libv2ray.CoreCallbackHandler
 import libv2ray.Libv2ray
+import libv2ray.V2RayPoint
+import libv2ray.V2RayVPNServiceSupportsSet
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
 /**
  * Wrapper for Xray-core via libv2ray.aar
+ * API: Libv2ray.newV2RayPoint() -> V2RayPoint.runLoop()/stopLoop()
  */
 object XrayWrapper {
     
     private const val TAG = "Xray"
     
-    private var coreController: Any? = null
+    private var v2rayPoint: V2RayPoint? = null
     private var isRunning = false
     private var currentConfig: String? = null
+    private var runThread: Thread? = null
     
     /**
      * Initialize Xray wrapper with application context
@@ -34,30 +36,63 @@ object XrayWrapper {
             val filesDir = context.filesDir.absolutePath
             LogManager.d(TAG, "filesDir: $filesDir")
             
-            val geoDir = File(filesDir, "xray")
-            LogManager.d(TAG, "geoDir: ${geoDir.absolutePath}, exists: ${geoDir.exists()}")
-            
-            if (!geoDir.exists()) {
-                val created = geoDir.mkdirs()
-                LogManager.d(TAG, "geoDir created: $created")
+            // Create xray directory for assets
+            val xrayDir = File(filesDir, "xray")
+            if (!xrayDir.exists()) {
+                val created = xrayDir.mkdirs()
+                LogManager.d(TAG, "xrayDir created: $created")
             }
             
-            LogManager.i(TAG, "Calling Libv2ray.initCoreEnv...")
+            // Copy geoip.dat and geosite.dat from assets to files dir
+            copyAssetsIfNeeded(context, xrayDir)
+            
+            LogManager.i(TAG, "Calling Libv2ray.initV2Env...")
             LogManager.flush()
             
-            Libv2ray.initCoreEnv(geoDir.absolutePath, "")
+            // API: initV2Env(assetsPath, externalAssetsPath)
+            Libv2ray.initV2Env(xrayDir.absolutePath, "")
             
-            LogManager.i(TAG, "Libv2ray.initCoreEnv DONE")
-            LogManager.flush()
+            LogManager.i(TAG, "Libv2ray.initV2Env DONE")
             
             val version = Libv2ray.checkVersionX()
             LogManager.i(TAG, "Xray version: $version")
             LogManager.i(TAG, "=== XrayWrapper.init() SUCCESS ===")
             LogManager.flush()
             
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             LogManager.e(TAG, "=== XrayWrapper.init() FAILED ===", e)
             LogManager.flush()
+            throw e
+        }
+    }
+    
+    /**
+     * Copy geoip.dat and geosite.dat from assets to files directory
+     */
+    private fun copyAssetsIfNeeded(context: Context, destDir: File) {
+        try {
+            val assets = listOf("geoip.dat", "geosite.dat")
+            
+            for (asset in assets) {
+                val destFile = File(destDir, asset)
+                
+                // Only copy if not exists
+                if (!destFile.exists()) {
+                    LogManager.d(TAG, "Copying $asset from assets...")
+                    
+                    context.assets.open(asset).use { input ->
+                        destFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    
+                    LogManager.d(TAG, "$asset copied (${destFile.length()} bytes)")
+                } else {
+                    LogManager.d(TAG, "$asset already exists (${destFile.length()} bytes)")
+                }
+            }
+        } catch (e: Throwable) {
+            LogManager.e(TAG, "Failed to copy assets", e)
         }
     }
     
@@ -69,8 +104,12 @@ object XrayWrapper {
         
         val json = JSONObject()
         
-        json.put("log", JSONObject().put("loglevel", "warning"))
+        // Log settings
+        json.put("log", JSONObject().apply {
+            put("loglevel", "warning")
+        })
         
+        // Inbounds - SOCKS5 and HTTP proxy
         val inbounds = JSONArray()
         
         inbounds.put(JSONObject().apply {
@@ -93,6 +132,7 @@ object XrayWrapper {
         
         json.put("inbounds", inbounds)
         
+        // Outbounds
         val outbounds = JSONArray()
         
         outbounds.put(JSONObject().apply {
@@ -140,11 +180,13 @@ object XrayWrapper {
                     })
                 }
                 
+                // Socket options (fragment, etc)
                 put("sockopt", JSONObject().apply {
                     if (config.tcpFastOpen) put("tcpFastOpen", true)
                     if (config.tcpNoDelay) put("tcpNoDelay", true)
                     if (config.tcpKeepAliveInterval > 0) put("tcpKeepAliveInterval", config.tcpKeepAliveInterval)
                     
+                    // FRAGMENTATION - the key feature!
                     if (config.fragmentationEnabled) {
                         put("dialer", JSONObject().apply {
                             put("domainStrategy", "AsIs")
@@ -159,11 +201,13 @@ object XrayWrapper {
             })
         })
         
+        // Direct outbound
         outbounds.put(JSONObject().apply {
             put("tag", "direct")
             put("protocol", "freedom")
         })
         
+        // Block outbound
         outbounds.put(JSONObject().apply {
             put("tag", "block")
             put("protocol", "blackhole")
@@ -171,14 +215,17 @@ object XrayWrapper {
         
         json.put("outbounds", outbounds)
         
+        // Routing
         json.put("routing", JSONObject().apply {
             put("domainStrategy", "IPIfNonMatch")
             put("rules", JSONArray().apply {
+                // Private IPs -> direct
                 put(JSONObject().apply {
                     put("type", "field")
                     put("ip", JSONArray().put("geoip:private"))
                     put("outboundTag", "direct")
                 })
+                // Everything else -> proxy
                 put(JSONObject().apply {
                     put("type", "field")
                     put("outboundTag", "proxy")
@@ -189,6 +236,10 @@ object XrayWrapper {
         return json.toString(2)
     }
     
+    /**
+     * Start Xray with given config
+     * Uses V2RayPoint.runLoop() which is BLOCKING - run in separate thread!
+     */
     fun start(configJson: String): Boolean {
         LogManager.i(TAG, "=== XrayWrapper.start() ===")
         LogManager.d(TAG, "Config length: ${configJson.length}")
@@ -202,49 +253,85 @@ object XrayWrapper {
         try {
             currentConfig = configJson
             
-            LogManager.d(TAG, "Creating CoreCallbackHandler...")
-            LogManager.flush()
-            
-            val callback = object : CoreCallbackHandler {
-                override fun startup(): Long {
-                    LogManager.i(TAG, "Xray core STARTED callback")
-                    return 0
-                }
-                
-                override fun shutdown(): Long {
-                    LogManager.i(TAG, "Xray core SHUTDOWN callback")
-                    return 0
-                }
-                
+            // Create V2RayVPNServiceSupportsSet callback
+            val supportsSet = object : V2RayVPNServiceSupportsSet() {
                 override fun onEmitStatus(p0: Long, p1: String?): Long {
                     LogManager.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
                     return 0
                 }
+                
+                override fun prepare(): Long {
+                    LogManager.i(TAG, "Xray prepare()")
+                    return 0
+                }
+                
+                override fun protect(p0: Long): Boolean {
+                    LogManager.d(TAG, "Xray protect($p0)")
+                    return true
+                }
+                
+                override fun setup(p0: String?): Long {
+                    LogManager.i(TAG, "Xray setup: ${p0?.take(100)}...")
+                    return 0
+                }
+                
+                override fun shutdown() {
+                    LogManager.i(TAG, "Xray shutdown()")
+                }
             }
             
-            LogManager.d(TAG, "Creating CoreController...")
+            LogManager.d(TAG, "Creating V2RayPoint...")
             LogManager.flush()
             
-            coreController = Libv2ray.newCoreController(callback)
+            // API: newV2RayPoint(supportsSet, isVPN)
+            // isVPN = false for proxy mode (SOCKS5/HTTP), true for VPN mode
+            v2rayPoint = Libv2ray.newV2RayPoint(supportsSet, false)
             
-            LogManager.d(TAG, "CoreController created: ${coreController != null}")
+            if (v2rayPoint == null) {
+                LogManager.e(TAG, "V2RayPoint is NULL!")
+                LogManager.flush()
+                return false
+            }
+            
+            LogManager.d(TAG, "V2RayPoint created OK")
+            
+            // Set config
+            v2rayPoint!!.configureFileContent = configJson
+            v2rayPoint!!.domainName = "RaccoonVPN"
+            
+            LogManager.i(TAG, "Starting runLoop in background thread...")
             LogManager.flush()
             
-            val controller = coreController as? libv2ray.CoreController
-            LogManager.d(TAG, "Casting controller: ${controller != null}")
-            LogManager.flush()
+            // runLoop is BLOCKING - run in separate thread
+            runThread = Thread {
+                try {
+                    LogManager.i(TAG, "runLoop() STARTING")
+                    v2rayPoint?.runLoop()
+                    LogManager.i(TAG, "runLoop() EXITED")
+                } catch (e: Throwable) {
+                    LogManager.e(TAG, "runLoop() CRASHED", e)
+                }
+            }.apply {
+                name = "XrayRunLoop"
+                isDaemon = true
+                start()
+            }
             
-            LogManager.i(TAG, "Calling startLoop...")
-            LogManager.flush()
+            // Wait a bit to check if it started
+            Thread.sleep(500)
             
-            controller?.startLoop(configJson, 0)
+            if (runThread?.isAlive == true) {
+                isRunning = true
+                LogManager.i(TAG, "=== XrayWrapper.start() SUCCESS ===")
+                LogManager.flush()
+                return true
+            } else {
+                LogManager.e(TAG, "runLoop thread died immediately!")
+                LogManager.flush()
+                return false
+            }
             
-            isRunning = true
-            LogManager.i(TAG, "=== XrayWrapper.start() SUCCESS ===")
-            LogManager.flush()
-            return true
-            
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             LogManager.e(TAG, "=== XrayWrapper.start() FAILED ===", e)
             LogManager.flush()
             return false
@@ -252,21 +339,24 @@ object XrayWrapper {
     }
     
     fun stop() {
-        if (!isRunning) return
+        if (!isRunning && v2rayPoint == null) return
         
         LogManager.i(TAG, "XrayWrapper.stop()")
         
         try {
-            val controller = coreController as? libv2ray.CoreController
-            controller?.stopLoop()
-            coreController = null
-            isRunning = false
-            currentConfig = null
-            LogManager.i(TAG, "Xray stopped")
-        } catch (e: Exception) {
-            LogManager.e(TAG, "Failed to stop Xray", e)
+            v2rayPoint?.stopLoop()
+        } catch (e: Throwable) {
+            LogManager.e(TAG, "Error stopping", e)
         }
         
+        runThread?.interrupt()
+        runThread = null
+        
+        v2rayPoint = null
+        isRunning = false
+        currentConfig = null
+        
+        LogManager.i(TAG, "Xray stopped")
         LogManager.flush()
     }
     
