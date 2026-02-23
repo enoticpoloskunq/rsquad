@@ -30,15 +30,23 @@ fun LogsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     
     var showClearDialog by remember { mutableStateOf(false) }
     var autoScroll by remember { mutableStateOf(true) }
+    var showCrashDialog by remember { mutableStateOf(false) }
     
     val logs = LogManager.getLogs()
+    val hasCrash = LogManager.hasLastCrash()
     
-    // Auto-scroll to bottom when new logs arrive
+    // Show crash dialog if exists
+    LaunchedEffect(hasCrash) {
+        if (hasCrash) {
+            showCrashDialog = true
+        }
+    }
+    
+    // Auto-scroll
     LaunchedEffect(logs.size) {
         if (autoScroll && logs.isNotEmpty()) {
             listState.animateScrollToItem(logs.size - 1)
@@ -55,14 +63,12 @@ fun LogsScreen(
                     }
                 },
                 actions = {
-                    // Auto-scroll toggle
                     IconButton(onClick = { autoScroll = !autoScroll }) {
                         Icon(
                             if (autoScroll) Icons.Default.KeyboardArrowDown else Icons.Default.Lock,
                             "Auto-scroll"
                         )
                     }
-                    // Copy logs
                     IconButton(onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         val clip = ClipData.newPlainText("Raccoon Logs", LogManager.exportLogs())
@@ -71,19 +77,16 @@ fun LogsScreen(
                     }) {
                         Icon(Icons.Default.ContentCopy, "Copy")
                     }
-                    // Share logs
                     IconButton(onClick = {
                         val sendIntent = android.content.Intent().apply {
                             action = android.content.Intent.ACTION_SEND
                             putExtra(android.content.Intent.EXTRA_TEXT, LogManager.exportLogs())
                             type = "text/plain"
                         }
-                        val shareIntent = android.content.Intent.createChooser(sendIntent, "Поделиться логами")
-                        context.startActivity(shareIntent)
+                        context.startActivity(android.content.Intent.createChooser(sendIntent, "Поделиться"))
                     }) {
                         Icon(Icons.Default.Share, "Share")
                     }
-                    // Clear
                     IconButton(onClick = { showClearDialog = true }) {
                         Icon(Icons.Default.Delete, "Clear")
                     }
@@ -96,7 +99,43 @@ fun LogsScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            // Device info card
+            // Crash warning
+            if (hasCrash) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Обнаружен краш! Нажмите для просмотра",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { showCrashDialog = true }) {
+                            Icon(Icons.Default.ArrowForward, "View crash", 
+                                tint = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    }
+                }
+            }
+            
+            // Device info
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -105,111 +144,93 @@ fun LogsScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
-                Column(
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    Text(
-                        "📱 ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        "🤖 Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        "🔧 ROM: ${RomCompat.romName}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("📱 ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text("🤖 Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})",
+                        style = MaterialTheme.typography.bodySmall)
+                    Text("🔧 ROM: ${RomCompat.romName}",
+                        style = MaterialTheme.typography.bodySmall)
                     
-                    // Show power warning if needed
                     RomCompat.getPowerManagementWarning()?.let { warning ->
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = Color(0xFFFFA000),
-                                modifier = Modifier.size(16.dp)
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, null, 
+                                tint = Color(0xFFFFA000), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                warning,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFFFA000)
-                            )
+                            Text(warning, style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFA000))
                         }
                     }
                 }
             }
             
-            // Log stats
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "Записей: ${logs.size}",
-                    style = MaterialTheme.typography.labelSmall
-                )
-                Text(
-                    "MTU: ${RomCompat.getRecommendedMtu()}",
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
+            // Log count
+            Text("Записей: ${logs.size}", style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 12.dp))
             
-            // Logs list
-            Card(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp)
-            ) {
+            // Logs
+            Card(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                 if (logs.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Нет логов",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Нет логов", style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(4.dp)
-                    ) {
-                        items(logs) { log ->
-                            LogEntryItem(log)
-                        }
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(4.dp)) {
+                        items(logs) { log -> LogEntryItem(log) }
                     }
                 }
             }
         }
     }
     
-    // Clear confirmation dialog
+    // Crash dialog
+    if (showCrashDialog) {
+        AlertDialog(
+            onDismissRequest = { showCrashDialog = false },
+            title = { Text("💥 Последний краш") },
+            text = {
+                val crashLog = LogManager.getLastCrash() ?: "Нет данных"
+                Column {
+                    Text(
+                        crashLog.take(2000),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.height(300.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Crash", LogManager.getLastCrash()))
+                        Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
+                    }) { Text("Копировать") }
+                    TextButton(onClick = {
+                        LogManager.clearCrash()
+                        showCrashDialog = false
+                    }) { Text("Очистить") }
+                    TextButton(onClick = { showCrashDialog = false }) { Text("Закрыть") }
+                }
+            }
+        )
+    }
+    
+    // Clear dialog
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
             title = { Text("Очистить логи?") },
-            text = { Text("Все логи будут удалены") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         LogManager.clearLogs()
                         showClearDialog = false
-                        Toast.makeText(context, "Логи очищены", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Очищено", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Очистить") }
             },
             dismissButton = {
@@ -222,64 +243,23 @@ fun LogsScreen(
 @Composable
 fun LogEntryItem(log: LogManager.LogEntry) {
     val color = when (log.level) {
-        android.util.Log.VERBOSE, android.util.Log.DEBUG -> 
-            MaterialTheme.colorScheme.onSurfaceVariant
-        android.util.Log.INFO -> 
-            MaterialTheme.colorScheme.primary
-        android.util.Log.WARN -> 
-            Color(0xFFFFA000)
-        android.util.Log.ERROR -> 
-            MaterialTheme.colorScheme.error
-        else -> 
-            MaterialTheme.colorScheme.onSurface
+        android.util.Log.VERBOSE, android.util.Log.DEBUG -> MaterialTheme.colorScheme.onSurfaceVariant
+        android.util.Log.INFO -> MaterialTheme.colorScheme.primary
+        android.util.Log.WARN -> Color(0xFFFFA000)
+        android.util.Log.ERROR -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurface
     }
     
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 1.dp)
-    ) {
-        Text(
-            text = log.formattedTime,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.width(80.dp)
-        )
-        Text(
-            text = log.levelName,
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.width(16.dp)
-        )
-        Text(
-            text = "/${log.tag}: ",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.width(60.dp),
-            maxLines = 1
-        )
-        Text(
-            text = log.message,
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.weight(1f)
-        )
-    }
-    
-    // Show stack trace for errors
-    log.throwable?.let { e ->
-        android.util.Log.getStackTraceString(e).lines().take(5).forEach { line ->
-            Text(
-                text = "    $line",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+        Text(log.formattedTime, style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace,
+            modifier = Modifier.width(80.dp))
+        Text(log.levelName, style = MaterialTheme.typography.labelSmall,
+            color = color, fontFamily = FontFamily.Monospace, modifier = Modifier.width(16.dp))
+        Text("/${log.tag}: ", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace,
+            modifier = Modifier.width(60.dp), maxLines = 1)
+        Text(log.message, style = MaterialTheme.typography.labelSmall,
+            color = color, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
     }
 }

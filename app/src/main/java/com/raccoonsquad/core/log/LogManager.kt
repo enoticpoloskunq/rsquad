@@ -1,33 +1,34 @@
 package com.raccoonsquad.core.log
 
 import android.content.Context
+import android.os.Process
 import android.util.Log
 import java.io.File
 import java.io.FileWriter
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
- * Centralized logging system for Raccoon Squad
- * 
- * Features:
- * - Stores logs in memory and file (SYNC for crash safety)
- * - Accessible from app UI (no root needed)
- * - Thread-safe
+ * Centralized logging with crash handler
  */
 object LogManager {
     
     private const val TAG = "RaccoonLog"
     private const val MAX_LOG_SIZE = 2000
     private const val LOG_FILE_NAME = "raccoon_log.txt"
-    private const val MAX_FILE_SIZE = 1024 * 1024 // 1MB
+    private const val CRASH_FILE_NAME = "raccoon_crash.txt"
+    private const val MAX_FILE_SIZE = 1024 * 1024
     
     private val logs = ConcurrentLinkedQueue<LogEntry>()
     
     private var logFile: File? = null
+    private var crashFile: File? = null
     private var fileWriter: FileWriter? = null
     private var isInitialized = false
+    private var defaultHandler: Thread.UncaughtExceptionHandler? = null
     
     data class LogEntry(
         val timestamp: Long,
@@ -54,16 +55,18 @@ object LogManager {
         
         try {
             logFile = File(context.filesDir, LOG_FILE_NAME)
+            crashFile = File(context.filesDir, CRASH_FILE_NAME)
             
-            // Rotate if too large
             if (logFile!!.exists() && logFile!!.length() > MAX_FILE_SIZE) {
                 val backup = File(context.filesDir, "${LOG_FILE_NAME}.old")
                 logFile!!.renameTo(backup)
                 logFile = File(context.filesDir, LOG_FILE_NAME)
             }
             
-            // Open file writer in append mode, auto-flush
             fileWriter = FileWriter(logFile!!, true)
+            
+            // Install crash handler FIRST
+            installCrashHandler()
             
             isInitialized = true
             
@@ -71,6 +74,67 @@ object LogManager {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to init LogManager", e)
         }
+    }
+    
+    /**
+     * Install global crash handler to catch native crashes
+     */
+    private fun installCrashHandler() {
+        defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            // Write crash to file immediately
+            try {
+                val sw = StringWriter()
+                val pw = PrintWriter(sw)
+                pw.println("=== CRASH at ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())} ===")
+                pw.println("Thread: ${thread.name} (${thread.id})")
+                pw.println()
+                throwable.printStackTrace(pw)
+                pw.println()
+                pw.println("=== Recent logs ===")
+                pw.println(getLogsAsText())
+                pw.flush()
+                
+                crashFile?.writeText(sw.toString())
+                
+                // Also try to flush main log
+                fileWriter?.flush()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to write crash log", e)
+            }
+            
+            // Call default handler
+            defaultHandler?.uncaughtException(thread, throwable) 
+                ?: Process.killProcess(Process.myPid())
+        }
+        
+        i(TAG, "Crash handler installed")
+    }
+    
+    /**
+     * Check if there was a crash last time
+     */
+    fun hasLastCrash(): Boolean {
+        return crashFile?.exists() == true && crashFile!!.length() > 0
+    }
+    
+    /**
+     * Get last crash log
+     */
+    fun getLastCrash(): String? {
+        return try {
+            crashFile?.takeIf { it.exists() }?.readText()
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
+     * Clear crash log
+     */
+    fun clearCrash() {
+        crashFile?.delete()
     }
     
     fun getLogs(): List<LogEntry> = logs.toList()
@@ -103,7 +167,14 @@ object LogManager {
             append("ROM: ${getRomInfo()}\n")
             append("=============================\n\n")
         }
-        return header + getLogsAsText()
+        
+        // Include crash if exists
+        val crash = getLastCrash()
+        val crashSection = if (crash != null) {
+            "\n\n=== LAST CRASH ===\n$crash\n"
+        } else ""
+        
+        return header + getLogsAsText() + crashSection
     }
     
     fun v(tag: String, message: String) {
@@ -131,14 +202,11 @@ object LogManager {
         addLog(Log.ERROR, tag, message, throwable)
     }
     
-    /**
-     * Flush logs to disk immediately (call before potential crash)
-     */
     fun flush() {
         try {
             fileWriter?.flush()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to flush logs", e)
+            Log.e(TAG, "Failed to flush", e)
         }
     }
     
@@ -151,13 +219,11 @@ object LogManager {
             throwable = throwable
         )
         
-        // Add to memory
         if (logs.size >= MAX_LOG_SIZE) {
             logs.poll()
         }
         logs.offer(entry)
         
-        // Write to file SYNC (for crash safety)
         writeToFileSync(entry)
     }
     
@@ -168,7 +234,7 @@ object LogManager {
             
             fileWriter?.apply {
                 write(line)
-                flush() // SYNC write for crash safety
+                flush()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write log", e)
