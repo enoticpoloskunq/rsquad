@@ -24,29 +24,45 @@ jobs:
       with:
         gradle-version: 8.5
     
+    - name: Create libs directory
+      run: mkdir -p app/libs
+    
     - name: Download libv2ray.aar
       run: |
-        mkdir -p app/libs
-        # ✅ FIXED: Pin specific version instead of 'latest' to avoid breaking changes
-        # Check available versions: https://github.com/2dust/AndroidLibXrayLite/releases
-        LIBV2RAY_VERSION="v26.2.6"
-        
         curl -L -o app/libs/libv2ray.aar \
-          "https://github.com/2dust/AndroidLibXrayLite/releases/download/${LIBV2RAY_VERSION}/libv2ray.aar"
-        
-        # ✅ Optional: Verify SHA256 checksum (find hash on release page)
-        # echo "EXPECTED_HASH_HERE  app/libs/libv2ray.aar" | sha256sum -c - || exit 1
-        
-        echo "✅ Downloaded libv2ray.aar ${LIBV2RAY_VERSION}: $(ls -lh app/libs/libv2ray.aar)"
+          "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
+        echo "Downloaded libv2ray.aar:"
+        ls -lh app/libs/
     
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
-    - name: Build Debug APK
-      run: gradle assembleDebug --no-daemon
+    - name: Build Debug APKs
+      run: ./gradlew assembleDebug --no-daemon
     
-    - name: Upload Debug APK
+    - name: Upload arm64-v8a Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: raccoon-squad-arm64-debug
+        path: app/build/outputs/apk/debug/*arm64-v8a*.apk
+    
+    - name: Upload armeabi-v7a Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: raccoon-squad-armeabi-debug
+        path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
+    
+    - name: Build Release APKs
+      run: ./gradlew assembleRelease --no-daemon
+    
+    - name: Upload arm64-v8a Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: raccoon-squad-arm64-release
+        path: app/build/outputs/apk/release/*arm64-v8a*.apk
+    
+    - name: Upload armeabi-v7a Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: raccoon-squad-armeabi-release
+        path: app/build/outputs/apk/release/*armeabi-v7a*.apk
