@@ -143,12 +143,12 @@ class NodeRepository(private val context: Context) {
             put("realitySpiderX", config.realitySpiderX)
             put("flow", config.flow.name)
             put("fragmentationEnabled", config.fragmentationEnabled)
-            // ✅ Используем прямые поля вместо legacy-геттеров для консистентности
-            put("fragmentationPackets", config.fragmentPackets)
-            put("fragmentationLength", config.fragmentLength)            put("fragmentationInterval", config.fragmentInterval)
+            // ✅ Читаем через legacy-геттеры (они работают на чтение)
+            put("fragmentationPackets", config.fragmentationPackets)
+            put("fragmentationLength", config.fragmentationLength)            put("fragmentationInterval", config.fragmentationInterval)
             put("noiseEnabled", config.noiseEnabled)
             put("noiseType", config.noiseType)
-            put("noisePacketCount", config.noisePacketSize)
+            put("noisePacketCount", config.noisePacketCount)
             put("tcpFastOpen", config.tcpFastOpen)
             put("tcpNoDelay", config.tcpNoDelay)
             put("tcpKeepAlive", config.tcpKeepAlive)
@@ -170,7 +170,7 @@ class NodeRepository(private val context: Context) {
             realitySpiderX = obj.optString("realitySpiderX", "/"),
             flow = FlowMode.valueOf(obj.optString("flow", "XTLS_RPRX_VISION")),
             fragmentationEnabled = obj.optBoolean("fragmentationEnabled", false),
-            // ✅ FIXED: используем реальные имена параметров конструктора VlessConfig
+            // ✅ FIXED: используем РЕАЛЬНЫЕ имена параметров конструктора VlessConfig
             fragmentPackets = obj.optString("fragmentationPackets", "1-3"),
             fragmentLength = obj.optString("fragmentationLength", "10-20"),
             fragmentInterval = obj.optString("fragmentationInterval", "10"),
