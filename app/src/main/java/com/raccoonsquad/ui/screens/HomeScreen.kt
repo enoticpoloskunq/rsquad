@@ -163,7 +163,19 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad") },
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad")
+                        if (uiStates.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "(${uiStates.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
                 actions = {
                     if (uiStates.isNotEmpty()) {
                         Box {
