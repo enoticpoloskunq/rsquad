@@ -47,7 +47,8 @@ class NodeRepository(private val context: Context) {
                 jsonArray.put(configToJson(config))
                 prefs[nodesKey] = jsonArray.toString()
             }
-        }    }
+        }
+    }
     
     suspend fun addNodes(configs: List<VlessConfig>) {
         context.dataStore.edit { prefs ->
@@ -96,7 +97,8 @@ class NodeRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[nodesKey] = "[]"
             prefs.remove(activeNodeKey)
-        }    }
+        }
+    }
     
     suspend fun setActiveNode(uuid: String?) {
         context.dataStore.edit { prefs ->
@@ -143,9 +145,9 @@ class NodeRepository(private val context: Context) {
             put("realitySpiderX", config.realitySpiderX)
             put("flow", config.flow.name)
             put("fragmentationEnabled", config.fragmentationEnabled)
-            // ✅ Читаем через legacy-геттеры (они работают на чтение)
             put("fragmentationPackets", config.fragmentationPackets)
-            put("fragmentationLength", config.fragmentationLength)            put("fragmentationInterval", config.fragmentationInterval)
+            put("fragmentationLength", config.fragmentationLength)
+            put("fragmentationInterval", config.fragmentationInterval)
             put("noiseEnabled", config.noiseEnabled)
             put("noiseType", config.noiseType)
             put("noisePacketCount", config.noisePacketCount)
@@ -170,7 +172,6 @@ class NodeRepository(private val context: Context) {
             realitySpiderX = obj.optString("realitySpiderX", "/"),
             flow = FlowMode.valueOf(obj.optString("flow", "XTLS_RPRX_VISION")),
             fragmentationEnabled = obj.optBoolean("fragmentationEnabled", false),
-            // ✅ FIXED: используем РЕАЛЬНЫЕ имена параметров конструктора VlessConfig
             fragmentPackets = obj.optString("fragmentationPackets", "1-3"),
             fragmentLength = obj.optString("fragmentationLength", "10-20"),
             fragmentInterval = obj.optString("fragmentationInterval", "10"),
