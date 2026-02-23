@@ -6,7 +6,6 @@ import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.model.SecurityMode
 import com.raccoonsquad.data.model.FlowMode
 import libv2ray.CoreCallbackHandler
-import libv2ray.CoreController
 import libv2ray.Libv2ray
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,7 +20,7 @@ object XrayWrapper {
     
     private const val TAG = "XrayWrapper"
     
-    private var coreController: CoreController? = null
+    private var coreController: Any? = null
     private var isRunning = false
     private var currentConfig: String? = null
     
@@ -29,14 +28,18 @@ object XrayWrapper {
      * Initialize Xray wrapper with application context
      */
     fun init(context: Context) {
-        val filesDir = context.filesDir.absolutePath
-        val geoDir = File(filesDir, "xray")
-        if (!geoDir.exists()) geoDir.mkdirs()
-        
-        // Initialize core environment (asset path, key)
-        Libv2ray.initCoreEnv(geoDir.absolutePath, "")
-        
-        Log.i(TAG, "Xray wrapper initialized, version: ${Libv2ray.checkVersionX()}")
+        try {
+            val filesDir = context.filesDir.absolutePath
+            val geoDir = File(filesDir, "xray")
+            if (!geoDir.exists()) geoDir.mkdirs()
+            
+            // Initialize core environment (asset path, key)
+            Libv2ray.initCoreEnv(geoDir.absolutePath, "")
+            
+            Log.i(TAG, "Xray wrapper initialized, version: ${Libv2ray.checkVersionX()}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to init Xray", e)
+        }
     }
     
     /**
@@ -187,17 +190,17 @@ object XrayWrapper {
             
             // Create callback handler
             val callback = object : CoreCallbackHandler() {
-                override fun Startup(): Int {
+                override fun Startup(): Long {
                     Log.i(TAG, "Xray core started")
                     return 0
                 }
                 
-                override fun Shutdown(): Int {
+                override fun Shutdown(): Long {
                     Log.i(TAG, "Xray core shutdown")
                     return 0
                 }
                 
-                override fun OnEmitStatus(code: Int, message: String?): Int {
+                override fun OnEmitStatus(code: Long, message: String): Long {
                     Log.d(TAG, "Xray status: $code - $message")
                     return 0
                 }
@@ -207,11 +210,9 @@ object XrayWrapper {
             coreController = Libv2ray.newCoreController(callback)
             
             // Start with config (tunFd = 0 means use SOCKS proxy)
-            val error = coreController?.startLoop(configJson, 0L)
-            if (error != null) {
-                Log.e(TAG, "Failed to start Xray: ${error.message}")
-                return false
-            }
+            // Note: gomobile uses long for int32
+            val controller = coreController as? libv2ray.CoreController
+            controller?.startLoop(configJson, 0)
             
             isRunning = true
             Log.i(TAG, "Xray started successfully")
@@ -230,7 +231,8 @@ object XrayWrapper {
         if (!isRunning) return
         
         try {
-            coreController?.stopLoop()
+            val controller = coreController as? libv2ray.CoreController
+            controller?.stopLoop()
             coreController = null
             isRunning = false
             currentConfig = null
@@ -251,7 +253,8 @@ object XrayWrapper {
     fun measureDelay(url: String = "https://www.google.com/generate_204"): Long {
         if (!isRunning) return -1
         return try {
-            coreController?.measureDelay(url) ?: -1
+            val controller = coreController as? libv2ray.CoreController
+            controller?.measureDelay(url) ?: -1
         } catch (e: Exception) {
             -1
         }
@@ -263,7 +266,8 @@ object XrayWrapper {
     fun queryStats(tag: String = "proxy", direction: String = "downlink"): Long {
         if (!isRunning) return 0
         return try {
-            coreController?.queryStats(tag, direction) ?: 0
+            val controller = coreController as? libv2ray.CoreController
+            controller?.queryStats(tag, direction) ?: 0
         } catch (e: Exception) {
             0
         }
