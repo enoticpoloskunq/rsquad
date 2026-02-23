@@ -47,8 +47,7 @@ object XrayWrapper {
      */
     fun generateConfig(config: VlessConfig): String {
         val json = JSONObject()
-        
-        // Log
+                // Log
         json.put("log", JSONObject().put("loglevel", "warning"))
         
         // Inbounds
@@ -97,8 +96,7 @@ object XrayWrapper {
                                 else -> ""
                             })
                         }
-                    }))
-                }))
+                    }))                }))
             })
             put("streamSettings", JSONObject().apply {
                 put("network", "tcp")
@@ -147,8 +145,7 @@ object XrayWrapper {
         })
         
         // Direct outbound
-        outbounds.put(JSONObject().apply {
-            put("tag", "direct")
+        outbounds.put(JSONObject().apply {            put("tag", "direct")
             put("protocol", "freedom")
         })
         
@@ -188,20 +185,19 @@ object XrayWrapper {
         try {
             currentConfig = configJson
             
-            // IMPORTANT: Go interface methods must start with UPPERCASE!
-            // Startup, Shutdown, OnEmitStatus (not startup, shutdown, onEmitStatus)
+            // ✅ FIXED: CoreCallbackHandler is now an interface in v26.2.6 (no parentheses)
             val callback = object : CoreCallbackHandler {
-                override fun Startup(): Long {
+                override fun startup(): Long {
                     Log.i(TAG, "Xray core started")
                     return 0
                 }
                 
-                override fun Shutdown(): Long {
+                override fun shutdown(): Long {
                     Log.i(TAG, "Xray core shutdown")
-                    return 0
-                }
+                    return 0                }
                 
-                override fun OnEmitStatus(p0: Long, p1: String?): Long {
+                // Note: p1 is String? because Java String! maps to nullable in Kotlin
+                override fun onEmitStatus(p0: Long, p1: String?): Long {
                     Log.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
                     return 0
                 }
@@ -247,8 +243,7 @@ object XrayWrapper {
      */
     fun isRunning(): Boolean = isRunning
     
-    /**
-     * Measure latency
+    /**     * Measure latency
      */
     fun measureDelay(url: String = "https://www.google.com/generate_204"): Long {
         if (!isRunning) return -1

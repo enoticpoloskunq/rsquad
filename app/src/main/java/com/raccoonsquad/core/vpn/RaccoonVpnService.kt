@@ -46,6 +46,9 @@ class RaccoonVpnService : VpnService() {
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // CRITICAL: Start foreground IMMEDIATELY to prevent crash on Android 8+
+        startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
+        
         when (intent?.action) {
             ACTION_CONNECT -> {
                 @Suppress("DEPRECATION")
@@ -92,21 +95,23 @@ class RaccoonVpnService : VpnService() {
             
             if (vpnInterface == null) {
                 Log.e("RaccoonVpn", "VPN interface is null - revoked?")
+                disconnect()
                 return
             }
             
             // Start Xray
             if (!XrayWrapper.start(xrayConfig)) {
                 Log.e("RaccoonVpn", "Failed to start Xray")
-                vpnInterface?.close()
-                vpnInterface = null
+                disconnect()
                 return
             }
             
             isActive = true
             
-            // Start foreground notification
-            startForeground(NOTIFICATION_ID, createNotification(config.name))
+            // Update notification with node name
+            val notification = createNotification(config.name)
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.notify(NOTIFICATION_ID, notification)
             
             // Start VPN packet processing
             startVpnThread()
