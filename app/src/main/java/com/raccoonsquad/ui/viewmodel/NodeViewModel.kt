@@ -27,6 +27,7 @@ data class NodeUiState(
     val hasFragment: Boolean,
     val hasNoise: Boolean,
     val mtu: String,
+    val isFavorite: Boolean = false,
     val config: VlessConfig
 )
 
@@ -215,6 +216,12 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
+    fun toggleFavorite(uuid: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.toggleFavorite(uuid)
+        }
+    }
+    
     fun clearImportError() {
         _importError.value = null
     }
@@ -235,6 +242,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             hasFragment = config.fragmentationEnabled,
             hasNoise = config.noiseEnabled,
             mtu = config.mtu,
+            isFavorite = config.isFavorite,
             config = config
         )
     }

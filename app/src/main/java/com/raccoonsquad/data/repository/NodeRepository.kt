@@ -20,9 +20,24 @@ class NodeRepository(private val context: Context) {
     private val nodesKey = stringPreferencesKey("saved_nodes")
     private val activeNodeKey = stringPreferencesKey("active_node_uuid")
     
+    private var cachedNodes: List<VlessConfig> = emptyList()
+    
+    companion object {
+        @Volatile
+        private var instance: NodeRepository? = null
+        
+        fun getInstance(context: Context): NodeRepository {
+            return instance ?: synchronized(this) {
+                instance ?: NodeRepository(context.applicationContext).also { instance = it }
+            }
+        }
+    }
+    
     val nodes: Flow<List<VlessConfig>> = context.dataStore.data.map { prefs ->
         val nodesJson = prefs[nodesKey] ?: "[]"
-        parseNodesFromJson(nodesJson)
+        val parsed = parseNodesFromJson(nodesJson)
+        cachedNodes = parsed
+        parsed
     }
     
     val activeNodeUuid: Flow<String?> = context.dataStore.data.map { prefs ->
@@ -110,12 +125,52 @@ class NodeRepository(private val context: Context) {
         }
     }
     
-    fun parseMultiple(uriText: String): List<VlessConfig> {
-        return UriParser.parseMultiple(uriText)
+    suspend fun updateNode(config: VlessConfig) {
+        context.dataStore.edit { prefs ->
+            val currentNodes = prefs[nodesKey] ?: "[]"
+            val jsonArray = JSONArray(currentNodes)
+            val newArray = JSONArray()
+            
+            for (i in 0 until jsonArray.length()) {
+                val node = jsonArray.getJSONObject(i)
+                if (node.getString("uuid") == config.uuid) {
+                    newArray.put(configToJson(config))
+                } else {
+                    newArray.put(node)
+                }
+            }
+            
+            prefs[nodesKey] = newArray.toString()
+        }
     }
     
-    fun importFromUri(uri: String): VlessConfig? {
-        return UriParser.parse(uri)
+    suspend fun toggleFavorite(uuid: String) {
+        context.dataStore.edit { prefs ->
+            val currentNodes = prefs[nodesKey] ?: "[]"
+            val jsonArray = JSONArray(currentNodes)
+            val newArray = JSONArray()
+            
+            for (i in 0 until jsonArray.length()) {
+                val node = jsonArray.getJSONObject(i)
+                if (node.getString("uuid") == uuid) {
+                    val config = jsonToConfig(node)
+                    val updated = config.copy(isFavorite = !config.isFavorite)
+                    newArray.put(configToJson(updated))
+                } else {
+                    newArray.put(node)
+                }
+            }
+            
+            prefs[nodesKey] = newArray.toString()
+        }
+    }
+    
+    fun getNodesSync(): List<VlessConfig> {
+        return cachedNodes
+    }
+    
+    fun parseMultiple(uriText: String): List<VlessConfig> {
+        return UriParser.parseMultiple(uriText)
     }
     
     private fun parseNodesFromJson(json: String): List<VlessConfig> {
@@ -156,6 +211,7 @@ class NodeRepository(private val context: Context) {
             put("tcpKeepAlive", config.tcpKeepAlive)
             put("tcpKeepAliveInterval", config.tcpKeepAliveInterval)
             put("mtu", config.mtu)
+            put("isFavorite", config.isFavorite)
         }
     }
     
@@ -182,7 +238,8 @@ class NodeRepository(private val context: Context) {
             tcpNoDelay = obj.optBoolean("tcpNoDelay", true),
             tcpKeepAlive = obj.optBoolean("tcpKeepAlive", true),
             tcpKeepAliveInterval = obj.optInt("tcpKeepAliveInterval", 30),
-            mtu = obj.optString("mtu", "default")
+            mtu = obj.optString("mtu", "default"),
+            isFavorite = obj.optBoolean("isFavorite", false)
         )
     }
 }

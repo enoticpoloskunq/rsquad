@@ -54,7 +54,8 @@ data class VlessConfig(
     // Status
     val isActive: Boolean = false,
     val latency: Long? = null,
-    val lastConnected: Long? = null
+    val lastConnected: Long? = null,
+    val isFavorite: Boolean = false
 ) : Parcelable {
     
     // Legacy property aliases for backward compatibility
@@ -139,7 +140,8 @@ data class VlessConfig(
         tcpNoDelay = parcel.readByte() != 0.toByte(),
         tcpKeepAlive = parcel.readByte() != 0.toByte(),
         tcpKeepAliveInterval = parcel.readInt(),
-        mtu = parcel.readString() ?: "1500"
+        mtu = parcel.readString() ?: "1500",
+        isFavorite = parcel.readByte() != 0.toByte()
     )
     
     override fun writeToParcel(parcel: Parcel, flags: Int) {
@@ -168,6 +170,7 @@ data class VlessConfig(
         parcel.writeByte(if (tcpKeepAlive) 1 else 0)
         parcel.writeInt(tcpKeepAliveInterval)
         parcel.writeString(mtu)
+        parcel.writeByte(if (isFavorite) 1 else 0)
     }
     
     override fun describeContents(): Int = 0

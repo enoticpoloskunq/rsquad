@@ -87,7 +87,7 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Create UI states with proper active state
+    // Create UI states with proper active state, sorted by favorite
     val uiStates = remember(nodes, activeUuid, testResults) {
         nodes.mapIndexed { index, config -> 
             NodeUiState(
@@ -101,9 +101,10 @@ fun HomeScreen(
                 hasFragment = config.fragmentationEnabled,
                 hasNoise = config.noiseEnabled,
                 mtu = config.mtu,
+                isFavorite = config.isFavorite,
                 config = config
             )
-        }
+        }.sortedByDescending { it.isFavorite } // Favorites first
     }
     
     val activeNode = uiStates.find { it.isActive }
@@ -212,6 +213,9 @@ fun HomeScreen(
                             },
                             onTest = {
                                 viewModel.testNode(node.config)
+                            },
+                            onFavorite = {
+                                viewModel.toggleFavorite(node.config.uuid)
                             }
                         )
                     }
@@ -598,7 +602,8 @@ fun NodeCard(
     isTesting: Boolean,
     onClick: () -> Unit,
     onToggle: () -> Unit,
-    onTest: () -> Unit
+    onTest: () -> Unit,
+    onFavorite: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -614,6 +619,12 @@ fun NodeCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Favorite star
+                    Text(
+                        text = if (node.isFavorite) "⭐" else "",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    
                     Text(
                         text = "${if (node.isActive) "🟢" else "⚪"} ${node.name}",
                         style = MaterialTheme.typography.bodyLarge,
@@ -662,6 +673,14 @@ fun NodeCard(
             }
             
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Favorite button
+                IconButton(onClick = onFavorite) {
+                    Icon(
+                        if (node.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "Favorite"
+                    )
+                }
+                
                 // Test button
                 IconButton(
                     onClick = onTest,
