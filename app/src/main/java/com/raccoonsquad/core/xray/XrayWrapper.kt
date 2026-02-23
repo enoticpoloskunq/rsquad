@@ -6,24 +6,23 @@ import com.raccoonsquad.data.model.SecurityMode
 import com.raccoonsquad.data.model.FlowMode
 import com.raccoonsquad.core.log.LogManager
 import libv2ray.Libv2ray
-import libv2ray.V2RayPoint
-import libv2ray.V2RayVPNServiceSupportsSet
+import libv2ray.CoreCallbackHandler
+import libv2ray.CoreController
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
 /**
  * Wrapper for Xray-core via libv2ray.aar
- * API: Libv2ray.newV2RayPoint() -> V2RayPoint.runLoop()/stopLoop()
+ * API: Libv2ray.newCoreController() -> CoreController.startLoop()/stopLoop()
  */
 object XrayWrapper {
     
     private const val TAG = "Xray"
     
-    private var v2rayPoint: V2RayPoint? = null
+    private var coreController: CoreController? = null
     private var isRunning = false
     private var currentConfig: String? = null
-    private var runThread: Thread? = null
     
     /**
      * Initialize Xray wrapper with application context
@@ -46,13 +45,13 @@ object XrayWrapper {
             // Copy geoip.dat and geosite.dat from assets to files dir
             copyAssetsIfNeeded(context, xrayDir)
             
-            LogManager.i(TAG, "Calling Libv2ray.initV2Env...")
+            LogManager.i(TAG, "Calling Libv2ray.initCoreEnv...")
             LogManager.flush()
             
-            // API: initV2Env(assetsPath, externalAssetsPath)
-            Libv2ray.initV2Env(xrayDir.absolutePath, "")
+            // API: initCoreEnv(assetsPath, externalAssetsPath)
+            Libv2ray.initCoreEnv(xrayDir.absolutePath, "")
             
-            LogManager.i(TAG, "Libv2ray.initV2Env DONE")
+            LogManager.i(TAG, "Libv2ray.initCoreEnv DONE")
             
             val version = Libv2ray.checkVersionX()
             LogManager.i(TAG, "Xray version: $version")
@@ -238,7 +237,6 @@ object XrayWrapper {
     
     /**
      * Start Xray with given config
-     * Uses V2RayPoint.runLoop() which is BLOCKING - run in separate thread!
      */
     fun start(configJson: String): Boolean {
         LogManager.i(TAG, "=== XrayWrapper.start() ===")
@@ -253,83 +251,48 @@ object XrayWrapper {
         try {
             currentConfig = configJson
             
-            // Create V2RayVPNServiceSupportsSet callback
-            val supportsSet = object : V2RayVPNServiceSupportsSet() {
+            LogManager.d(TAG, "Creating CoreCallbackHandler...")
+            LogManager.flush()
+            
+            val callback = object : CoreCallbackHandler() {
+                override fun startup(): Long {
+                    LogManager.i(TAG, "Xray core STARTED")
+                    return 0
+                }
+                
+                override fun shutdown(): Long {
+                    LogManager.i(TAG, "Xray core SHUTDOWN")
+                    return 0
+                }
+                
                 override fun onEmitStatus(p0: Long, p1: String?): Long {
                     LogManager.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
                     return 0
                 }
-                
-                override fun prepare(): Long {
-                    LogManager.i(TAG, "Xray prepare()")
-                    return 0
-                }
-                
-                override fun protect(p0: Long): Boolean {
-                    LogManager.d(TAG, "Xray protect($p0)")
-                    return true
-                }
-                
-                override fun setup(p0: String?): Long {
-                    LogManager.i(TAG, "Xray setup: ${p0?.take(100)}...")
-                    return 0
-                }
-                
-                override fun shutdown() {
-                    LogManager.i(TAG, "Xray shutdown()")
-                }
             }
             
-            LogManager.d(TAG, "Creating V2RayPoint...")
+            LogManager.d(TAG, "Creating CoreController...")
             LogManager.flush()
             
-            // API: newV2RayPoint(supportsSet, isVPN)
-            // isVPN = false for proxy mode (SOCKS5/HTTP), true for VPN mode
-            v2rayPoint = Libv2ray.newV2RayPoint(supportsSet, false)
+            coreController = Libv2ray.newCoreController(callback)
             
-            if (v2rayPoint == null) {
-                LogManager.e(TAG, "V2RayPoint is NULL!")
+            if (coreController == null) {
+                LogManager.e(TAG, "CoreController is NULL!")
                 LogManager.flush()
                 return false
             }
             
-            LogManager.d(TAG, "V2RayPoint created OK")
-            
-            // Set config
-            v2rayPoint!!.configureFileContent = configJson
-            v2rayPoint!!.domainName = "RaccoonVPN"
-            
-            LogManager.i(TAG, "Starting runLoop in background thread...")
+            LogManager.d(TAG, "CoreController created OK")
+            LogManager.i(TAG, "Starting Xray loop...")
             LogManager.flush()
             
-            // runLoop is BLOCKING - run in separate thread
-            runThread = Thread {
-                try {
-                    LogManager.i(TAG, "runLoop() STARTING")
-                    v2rayPoint?.runLoop()
-                    LogManager.i(TAG, "runLoop() EXITED")
-                } catch (e: Throwable) {
-                    LogManager.e(TAG, "runLoop() CRASHED", e)
-                }
-            }.apply {
-                name = "XrayRunLoop"
-                isDaemon = true
-                start()
-            }
+            // startLoop is blocking but runs Xray in background
+            coreController?.startLoop(configJson, 0)
             
-            // Wait a bit to check if it started
-            Thread.sleep(500)
-            
-            if (runThread?.isAlive == true) {
-                isRunning = true
-                LogManager.i(TAG, "=== XrayWrapper.start() SUCCESS ===")
-                LogManager.flush()
-                return true
-            } else {
-                LogManager.e(TAG, "runLoop thread died immediately!")
-                LogManager.flush()
-                return false
-            }
+            isRunning = true
+            LogManager.i(TAG, "=== XrayWrapper.start() SUCCESS ===")
+            LogManager.flush()
+            return true
             
         } catch (e: Throwable) {
             LogManager.e(TAG, "=== XrayWrapper.start() FAILED ===", e)
@@ -339,20 +302,17 @@ object XrayWrapper {
     }
     
     fun stop() {
-        if (!isRunning && v2rayPoint == null) return
+        if (!isRunning && coreController == null) return
         
         LogManager.i(TAG, "XrayWrapper.stop()")
         
         try {
-            v2rayPoint?.stopLoop()
+            coreController?.stopLoop()
         } catch (e: Throwable) {
             LogManager.e(TAG, "Error stopping", e)
         }
         
-        runThread?.interrupt()
-        runThread = null
-        
-        v2rayPoint = null
+        coreController = null
         isRunning = false
         currentConfig = null
         
