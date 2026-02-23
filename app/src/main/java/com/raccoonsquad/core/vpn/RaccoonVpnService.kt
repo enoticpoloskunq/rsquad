@@ -9,7 +9,6 @@ import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
-import android.os.Process
 import com.raccoonsquad.MainActivity
 import com.raccoonsquad.R
 import com.raccoonsquad.core.xray.XrayWrapper
@@ -18,7 +17,6 @@ import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.core.compat.RomCompat
 import kotlinx.coroutines.*
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
 class RaccoonVpnService : VpnService() {
@@ -29,7 +27,7 @@ class RaccoonVpnService : VpnService() {
         const val NOTIFICATION_ID = 1
         const val CHANNEL_ID = "raccoon_vpn_channel"
         
-        private const val TAG = "VpnService"
+        private const val TAG = "VPN"
         
         var isActive = false
             private set
@@ -45,18 +43,37 @@ class RaccoonVpnService : VpnService() {
     
     override fun onCreate() {
         super.onCreate()
-        LogManager.i(TAG, "VPN Service onCreate")
-        LogManager.i(TAG, "ROM: ${RomCompat.romName}")
+        LogManager.i(TAG, "=== VPN Service onCreate ===")
+        LogManager.flush()
         
-        createNotificationChannel()
-        XrayWrapper.init(applicationContext)
+        try {
+            createNotificationChannel()
+            LogManager.d(TAG, "Notification channel created")
+            LogManager.flush()
+        } catch (e: Exception) {
+            LogManager.e(TAG, "Failed to create notification channel", e)
+            LogManager.flush()
+        }
         
-        // Apply ROM-specific process optimizations
+        try {
+            LogManager.i(TAG, "Initializing XrayWrapper...")
+            LogManager.flush()
+            XrayWrapper.init(applicationContext)
+            LogManager.i(TAG, "XrayWrapper initialized")
+            LogManager.flush()
+        } catch (e: Exception) {
+            LogManager.e(TAG, "Failed to init XrayWrapper", e)
+            LogManager.flush()
+        }
+        
         RomCompat.applyProcessOptimizations()
+        LogManager.i(TAG, "VPN Service onCreate DONE")
+        LogManager.flush()
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        LogManager.i(TAG, "onStartCommand: action=${intent?.action}")
+        LogManager.i(TAG, "=== onStartCommand: ${intent?.action} ===")
+        LogManager.flush()
         
         when (intent?.action) {
             ACTION_CONNECT -> {
@@ -68,29 +85,44 @@ class RaccoonVpnService : VpnService() {
                 }
                 
                 if (config != null) {
-                    LogManager.i(TAG, "Starting VPN for: ${config.name}")
+                    LogManager.i(TAG, "Config: ${config.name} @ ${config.serverAddress}:${config.port}")
+                    LogManager.flush()
                     
-                    // Start foreground FIRST for Android 8+
-                    val notification = createNotification("Connecting...")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        startForeground(
-                            NOTIFICATION_ID, 
-                            notification,
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                        )
-                    } else {
-                        startForeground(NOTIFICATION_ID, notification)
+                    try {
+                        LogManager.d(TAG, "Starting foreground...")
+                        LogManager.flush()
+                        
+                        val notification = createNotification("Connecting...")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            startForeground(
+                                NOTIFICATION_ID, 
+                                notification,
+                                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                            )
+                        } else {
+                            startForeground(NOTIFICATION_ID, notification)
+                        }
+                        
+                        LogManager.i(TAG, "Foreground started")
+                        LogManager.flush()
+                        
+                    } catch (e: Exception) {
+                        LogManager.e(TAG, "Failed to start foreground", e)
+                        LogManager.flush()
+                        stopSelf()
+                        return START_NOT_STICKY
                     }
-                    LogManager.i(TAG, "Foreground service started")
                     
                     connect(config)
                 } else {
-                    LogManager.e(TAG, "No config provided")
+                    LogManager.e(TAG, "No config in intent!")
+                    LogManager.flush()
                     stopSelf()
                 }
             }
             ACTION_DISCONNECT -> {
                 LogManager.i(TAG, "Disconnect requested")
+                LogManager.flush()
                 disconnect()
                 return START_NOT_STICKY
             }
@@ -99,10 +131,12 @@ class RaccoonVpnService : VpnService() {
     }
     
     private fun connect(config: VlessConfig) {
-        LogManager.i(TAG, "connect() called for: ${config.name}")
+        LogManager.i(TAG, "=== connect() START ===")
+        LogManager.flush()
         
         if (isActive) {
             LogManager.w(TAG, "Already active, disconnecting first")
+            LogManager.flush()
             disconnect()
         }
         
@@ -111,120 +145,128 @@ class RaccoonVpnService : VpnService() {
         try {
             // Generate Xray config
             LogManager.d(TAG, "Generating Xray config...")
+            LogManager.flush()
+            
             val xrayConfig = XrayWrapper.generateConfig(config)
-            LogManager.d(TAG, "Xray config generated (${xrayConfig.length} bytes)")
+            LogManager.d(TAG, "Config generated: ${xrayConfig.length} bytes")
+            LogManager.flush()
             
             // Build VPN interface
             val mtu = config.mtu.toIntOrNull() ?: RomCompat.getRecommendedMtu()
-            LogManager.i(TAG, "Building VPN interface with MTU: $mtu")
+            LogManager.i(TAG, "Building VPN interface (MTU=$mtu)...")
+            LogManager.flush()
             
             val builder = Builder()
-                .setSession("Raccoon Squad VPN")
+                .setSession("Raccoon VPN")
                 .setMtu(mtu)
                 .addAddress("10.66.66.1", 24)
                 .addRoute("0.0.0.0", 0)
                 .addDnsServer("8.8.8.8")
                 .addDnsServer("1.1.1.1")
             
-            // Exclude our app from VPN to avoid loops
             try {
-                builder.addDisallowedApplication("com.raccoonsquad")
-                LogManager.d(TAG, "App excluded from VPN tunnel")
+                builder.addDisallowedApplication(packageName)
+                LogManager.d(TAG, "App excluded from tunnel")
             } catch (e: Exception) {
-                LogManager.w(TAG, "Failed to exclude self: ${e.message}")
+                LogManager.w(TAG, "Could not exclude app: ${e.message}")
             }
+            LogManager.flush()
             
-            LogManager.i(TAG, "Establishing VPN interface...")
+            LogManager.d(TAG, "Establishing VPN interface...")
+            LogManager.flush()
+            
             vpnInterface = builder.establish()
             
             if (vpnInterface == null) {
-                LogManager.e(TAG, "VPN interface is null - permission revoked?")
+                LogManager.e(TAG, "VPN interface is NULL - permission revoked?")
+                LogManager.flush()
                 disconnect()
                 return
             }
             
-            LogManager.i(TAG, "VPN interface established, fd: ${vpnInterface!!.fd}")
+            LogManager.i(TAG, "VPN interface established (fd=${vpnInterface!!.fd})")
+            LogManager.flush()
             
             // Start Xray
-            LogManager.i(TAG, "Starting Xray core...")
-            if (!XrayWrapper.start(xrayConfig)) {
-                LogManager.e(TAG, "Failed to start Xray core")
+            LogManager.i(TAG, "Starting Xray...")
+            LogManager.flush()
+            
+            val started = XrayWrapper.start(xrayConfig)
+            
+            if (!started) {
+                LogManager.e(TAG, "Xray failed to start")
+                LogManager.flush()
                 disconnect()
                 return
             }
-            LogManager.i(TAG, "Xray core started successfully")
             
             isActive = true
             
-            // Update notification with node name
-            val notification = createNotification(config.name)
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.notify(NOTIFICATION_ID, notification)
+            // Update notification
+            try {
+                val notification = createNotification(config.name)
+                val nm = getSystemService(NotificationManager::class.java)
+                nm.notify(NOTIFICATION_ID, notification)
+            } catch (e: Exception) {
+                LogManager.w(TAG, "Could not update notification: ${e.message}")
+            }
             
-            // Start VPN packet processing
+            // Start packet thread
             startVpnThread()
             
             LogManager.i(TAG, "=== VPN CONNECTED ===")
             LogManager.i(TAG, "Node: ${config.name}")
             LogManager.i(TAG, "Server: ${config.serverAddress}:${config.port}")
-            LogManager.i(TAG, "MTU: $mtu")
-            LogManager.i(TAG, "ROM: ${RomCompat.romName}")
+            LogManager.flush()
             
         } catch (e: Exception) {
-            LogManager.e(TAG, "Failed to establish VPN", e)
+            LogManager.e(TAG, "connect() FAILED", e)
+            LogManager.flush()
             disconnect()
         }
     }
     
     private fun startVpnThread() {
         LogManager.d(TAG, "Starting VPN packet thread")
+        LogManager.flush()
         
         isVpnRunning = true
         vpnThread = Thread {
-            // Set thread priority for this ROM
             RomCompat.applyProcessOptimizations()
             
             val fd = vpnInterface?.fileDescriptor
             if (fd == null) {
-                LogManager.e(TAG, "No file descriptor in VPN thread")
+                LogManager.e(TAG, "No fd in packet thread")
+                LogManager.flush()
                 return@Thread
             }
             
             val input = FileInputStream(fd)
             val buffer = ByteBuffer.allocate(32767)
             
-            LogManager.d(TAG, "VPN packet thread started")
-            
-            var packetsRead = 0L
-            var lastLogTime = System.currentTimeMillis()
+            LogManager.d(TAG, "Packet thread running")
+            LogManager.flush()
             
             while (isVpnRunning && isActive) {
                 try {
-                    val length = input.read(buffer.array())
-                    if (length > 0) {
-                        packetsRead++
-                        buffer.clear()
-                        
-                        // Log stats every 30 seconds
-                        val now = System.currentTimeMillis()
-                        if (now - lastLogTime > 30000) {
-                            LogManager.d(TAG, "Packets processed: $packetsRead")
-                            lastLogTime = now
-                        }
-                    }
+                    val len = input.read(buffer.array())
+                    if (len > 0) buffer.clear()
                 } catch (e: Exception) {
                     if (isVpnRunning) {
-                        LogManager.e(TAG, "VPN thread error", e)
+                        LogManager.e(TAG, "Packet thread error", e)
+                        LogManager.flush()
                     }
                 }
             }
             
-            LogManager.d(TAG, "VPN packet thread stopped, total packets: $packetsRead")
+            LogManager.d(TAG, "Packet thread stopped")
+            LogManager.flush()
         }.apply { start() }
     }
     
     private fun disconnect() {
-        LogManager.i(TAG, "disconnect() called")
+        LogManager.i(TAG, "=== disconnect() ===")
+        LogManager.flush()
         
         isVpnRunning = false
         vpnThread?.interrupt()
@@ -232,19 +274,14 @@ class RaccoonVpnService : VpnService() {
         
         isActive = false
         
-        // Stop Xray
         try {
-            LogManager.d(TAG, "Stopping Xray core...")
             XrayWrapper.stop()
-            LogManager.d(TAG, "Xray core stopped")
         } catch (e: Exception) {
             LogManager.e(TAG, "Error stopping Xray", e)
         }
         
-        // Close interface
         try {
             vpnInterface?.close()
-            LogManager.d(TAG, "VPN interface closed")
         } catch (e: Exception) {
             LogManager.e(TAG, "Error closing interface", e)
         }
@@ -252,26 +289,29 @@ class RaccoonVpnService : VpnService() {
         
         currentConfig = null
         
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            LogManager.e(TAG, "Error stopForeground", e)
+        }
         
-        LogManager.i(TAG, "=== VPN DISCONNECTED ===")
+        LogManager.flush()
+        stopSelf()
     }
     
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Raccoon Squad VPN",
+                "Raccoon VPN",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "VPN connection status"
+                description = "VPN connection"
                 setShowBadge(false)
             }
             
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
-            LogManager.d(TAG, "Notification channel created")
         }
     }
     
@@ -284,7 +324,7 @@ class RaccoonVpnService : VpnService() {
         
         return androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("🦝 Raccoon Squad")
-            .setContentText("Connected to $nodeName")
+            .setContentText(nodeName)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -294,6 +334,7 @@ class RaccoonVpnService : VpnService() {
     
     override fun onDestroy() {
         LogManager.i(TAG, "VPN Service onDestroy")
+        LogManager.flush()
         disconnect()
         scope.cancel()
         super.onDestroy()

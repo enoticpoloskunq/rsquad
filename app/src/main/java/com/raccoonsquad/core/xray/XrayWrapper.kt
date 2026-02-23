@@ -5,6 +5,7 @@ import android.util.Log
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.model.SecurityMode
 import com.raccoonsquad.data.model.FlowMode
+import com.raccoonsquad.core.log.LogManager
 import libv2ray.CoreCallbackHandler
 import libv2ray.Libv2ray
 import org.json.JSONArray
@@ -13,12 +14,10 @@ import java.io.File
 
 /**
  * Wrapper for Xray-core via libv2ray.aar
- * 
- * API based on: https://github.com/2dust/AndroidLibXrayLite
  */
 object XrayWrapper {
     
-    private const val TAG = "XrayWrapper"
+    private const val TAG = "Xray"
     
     private var coreController: Any? = null
     private var isRunning = false
@@ -28,17 +27,37 @@ object XrayWrapper {
      * Initialize Xray wrapper with application context
      */
     fun init(context: Context) {
+        LogManager.i(TAG, "=== XrayWrapper.init() START ===")
+        LogManager.flush()
+        
         try {
             val filesDir = context.filesDir.absolutePath
-            val geoDir = File(filesDir, "xray")
-            if (!geoDir.exists()) geoDir.mkdirs()
+            LogManager.d(TAG, "filesDir: $filesDir")
             
-            // Initialize core environment (asset path, key)
+            val geoDir = File(filesDir, "xray")
+            LogManager.d(TAG, "geoDir: ${geoDir.absolutePath}, exists: ${geoDir.exists()}")
+            
+            if (!geoDir.exists()) {
+                val created = geoDir.mkdirs()
+                LogManager.d(TAG, "geoDir created: $created")
+            }
+            
+            LogManager.i(TAG, "Calling Libv2ray.initCoreEnv...")
+            LogManager.flush()
+            
             Libv2ray.initCoreEnv(geoDir.absolutePath, "")
             
-            Log.i(TAG, "Xray wrapper initialized, version: ${Libv2ray.checkVersionX()}")
+            LogManager.i(TAG, "Libv2ray.initCoreEnv DONE")
+            LogManager.flush()
+            
+            val version = Libv2ray.checkVersionX()
+            LogManager.i(TAG, "Xray version: $version")
+            LogManager.i(TAG, "=== XrayWrapper.init() SUCCESS ===")
+            LogManager.flush()
+            
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to init Xray", e)
+            LogManager.e(TAG, "=== XrayWrapper.init() FAILED ===", e)
+            LogManager.flush()
         }
     }
     
@@ -46,14 +65,14 @@ object XrayWrapper {
      * Generate Xray config JSON from VlessConfig
      */
     fun generateConfig(config: VlessConfig): String {
+        LogManager.d(TAG, "generateConfig() for ${config.name}")
+        
         val json = JSONObject()
-                // Log
+        
         json.put("log", JSONObject().put("loglevel", "warning"))
         
-        // Inbounds
         val inbounds = JSONArray()
         
-        // SOCKS inbound
         inbounds.put(JSONObject().apply {
             put("tag", "socks-in")
             put("port", 10808)
@@ -65,7 +84,6 @@ object XrayWrapper {
             })
         })
         
-        // HTTP inbound
         inbounds.put(JSONObject().apply {
             put("tag", "http-in")
             put("port", 10809)
@@ -75,10 +93,8 @@ object XrayWrapper {
         
         json.put("inbounds", inbounds)
         
-        // Outbounds
         val outbounds = JSONArray()
         
-        // VLESS outbound
         outbounds.put(JSONObject().apply {
             put("tag", "proxy")
             put("protocol", "vless")
@@ -96,7 +112,8 @@ object XrayWrapper {
                                 else -> ""
                             })
                         }
-                    }))                }))
+                    }))
+                }))
             })
             put("streamSettings", JSONObject().apply {
                 put("network", "tcp")
@@ -123,13 +140,11 @@ object XrayWrapper {
                     })
                 }
                 
-                // Socket settings
                 put("sockopt", JSONObject().apply {
                     if (config.tcpFastOpen) put("tcpFastOpen", true)
                     if (config.tcpNoDelay) put("tcpNoDelay", true)
                     if (config.tcpKeepAliveInterval > 0) put("tcpKeepAliveInterval", config.tcpKeepAliveInterval)
                     
-                    // Fragmentation
                     if (config.fragmentationEnabled) {
                         put("dialer", JSONObject().apply {
                             put("domainStrategy", "AsIs")
@@ -144,12 +159,11 @@ object XrayWrapper {
             })
         })
         
-        // Direct outbound
-        outbounds.put(JSONObject().apply {            put("tag", "direct")
+        outbounds.put(JSONObject().apply {
+            put("tag", "direct")
             put("protocol", "freedom")
         })
         
-        // Block outbound
         outbounds.put(JSONObject().apply {
             put("tag", "block")
             put("protocol", "blackhole")
@@ -157,7 +171,6 @@ object XrayWrapper {
         
         json.put("outbounds", outbounds)
         
-        // Routing
         json.put("routing", JSONObject().apply {
             put("domainStrategy", "IPIfNonMatch")
             put("rules", JSONArray().apply {
@@ -176,55 +189,72 @@ object XrayWrapper {
         return json.toString(2)
     }
     
-    /**
-     * Start Xray with config
-     */
     fun start(configJson: String): Boolean {
-        if (isRunning) stop()
+        LogManager.i(TAG, "=== XrayWrapper.start() ===")
+        LogManager.d(TAG, "Config length: ${configJson.length}")
+        LogManager.flush()
+        
+        if (isRunning) {
+            LogManager.w(TAG, "Already running, stopping first")
+            stop()
+        }
         
         try {
             currentConfig = configJson
             
-            // ✅ FIXED: CoreCallbackHandler is now an interface in v26.2.6 (no parentheses)
+            LogManager.d(TAG, "Creating CoreCallbackHandler...")
+            LogManager.flush()
+            
             val callback = object : CoreCallbackHandler {
                 override fun startup(): Long {
-                    Log.i(TAG, "Xray core started")
+                    LogManager.i(TAG, "Xray core STARTED callback")
                     return 0
                 }
                 
                 override fun shutdown(): Long {
-                    Log.i(TAG, "Xray core shutdown")
-                    return 0                }
+                    LogManager.i(TAG, "Xray core SHUTDOWN callback")
+                    return 0
+                }
                 
-                // Note: p1 is String? because Java String! maps to nullable in Kotlin
                 override fun onEmitStatus(p0: Long, p1: String?): Long {
-                    Log.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
+                    LogManager.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
                     return 0
                 }
             }
             
-            // Create controller
+            LogManager.d(TAG, "Creating CoreController...")
+            LogManager.flush()
+            
             coreController = Libv2ray.newCoreController(callback)
             
-            // Start with config (tunFd = 0 means use SOCKS proxy)
+            LogManager.d(TAG, "CoreController created: ${coreController != null}")
+            LogManager.flush()
+            
             val controller = coreController as? libv2ray.CoreController
+            LogManager.d(TAG, "Casting controller: ${controller != null}")
+            LogManager.flush()
+            
+            LogManager.i(TAG, "Calling startLoop...")
+            LogManager.flush()
+            
             controller?.startLoop(configJson, 0)
             
             isRunning = true
-            Log.i(TAG, "Xray started successfully")
+            LogManager.i(TAG, "=== XrayWrapper.start() SUCCESS ===")
+            LogManager.flush()
             return true
             
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start Xray", e)
+            LogManager.e(TAG, "=== XrayWrapper.start() FAILED ===", e)
+            LogManager.flush()
             return false
         }
     }
     
-    /**
-     * Stop Xray
-     */
     fun stop() {
         if (!isRunning) return
+        
+        LogManager.i(TAG, "XrayWrapper.stop()")
         
         try {
             val controller = coreController as? libv2ray.CoreController
@@ -232,44 +262,13 @@ object XrayWrapper {
             coreController = null
             isRunning = false
             currentConfig = null
-            Log.i(TAG, "Xray stopped")
+            LogManager.i(TAG, "Xray stopped")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to stop Xray", e)
+            LogManager.e(TAG, "Failed to stop Xray", e)
         }
+        
+        LogManager.flush()
     }
     
-    /**
-     * Check if Xray is running
-     */
     fun isRunning(): Boolean = isRunning
-    
-    /**     * Measure latency
-     */
-    fun measureDelay(url: String = "https://www.google.com/generate_204"): Long {
-        if (!isRunning) return -1
-        return try {
-            val controller = coreController as? libv2ray.CoreController
-            controller?.measureDelay(url) ?: -1
-        } catch (e: Exception) {
-            -1
-        }
-    }
-    
-    /**
-     * Query traffic stats
-     */
-    fun queryStats(tag: String = "proxy", direction: String = "downlink"): Long {
-        if (!isRunning) return 0
-        return try {
-            val controller = coreController as? libv2ray.CoreController
-            controller?.queryStats(tag, direction) ?: 0
-        } catch (e: Exception) {
-            0
-        }
-    }
-    
-    /**
-     * Get version
-     */
-    fun getVersion(): String = Libv2ray.checkVersionX()
 }
