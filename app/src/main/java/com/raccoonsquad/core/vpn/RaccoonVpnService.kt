@@ -15,6 +15,7 @@ import com.raccoonsquad.core.xray.XrayWrapper
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.core.compat.RomCompat
+import com.raccoonsquad.core.stats.TrafficStats
 
 class RaccoonVpnService : VpnService() {
     
@@ -193,6 +194,17 @@ class RaccoonVpnService : VpnService() {
             
             isActive = true
             
+            // Start traffic tracking
+            TrafficStats.startTracking(applicationInfo.uid)
+            
+            // Save last connected UUID for tile
+            try {
+                val sharedPrefs = getSharedPreferences("raccoon_prefs", MODE_PRIVATE)
+                sharedPrefs.edit().putString("last_connected_uuid", config.uuid).apply()
+            } catch (e: Throwable) {
+                LogManager.w(TAG, "Could not save last UUID")
+            }
+            
             // Update notification
             try {
                 val nm = getSystemService(NotificationManager::class.java)
@@ -216,6 +228,9 @@ class RaccoonVpnService : VpnService() {
         LogManager.flush()
         
         isActive = false
+        
+        // Stop traffic tracking
+        TrafficStats.stopTracking()
         
         try {
             XrayWrapper.stop()

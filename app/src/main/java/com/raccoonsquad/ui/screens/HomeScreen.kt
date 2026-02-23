@@ -23,6 +23,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raccoonsquad.core.vpn.RaccoonVpnService
 import com.raccoonsquad.core.util.NodeTester
+import com.raccoonsquad.core.stats.TrafficStats
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
@@ -109,6 +110,26 @@ fun HomeScreen(
     // VPN is active if there's an active node UUID
     val isVpnActive = activeUuid != null
     
+    // Traffic stats
+    var downloadSpeed by remember { mutableStateOf(0L) }
+    var uploadSpeed by remember { mutableStateOf(0L) }
+    var totalDownload by remember { mutableStateOf(0L) }
+    var totalUpload by remember { mutableStateOf(0L) }
+    
+    // Update traffic stats
+    LaunchedEffect(isVpnActive) {
+        if (isVpnActive) {
+            val listener: (Long, Long, Long, Long) -> Unit = { rx, tx, rxTotal, txTotal ->
+                downloadSpeed = rx
+                uploadSpeed = tx
+                totalDownload = rxTotal
+                totalUpload = txTotal
+            }
+            TrafficStats.addListener(listener)
+            awaitDispose { TrafficStats.removeListener(listener) }
+        }
+    }
+    
     LaunchedEffect(importCount) {
         when {
             importCount > 0 -> {
@@ -150,6 +171,10 @@ fun HomeScreen(
                 isActive = isVpnActive,
                 activeNode = activeNode,
                 nodeCount = uiStates.size,
+                downloadSpeed = downloadSpeed,
+                uploadSpeed = uploadSpeed,
+                totalDownload = totalDownload,
+                totalUpload = totalUpload,
                 onConnect = {
                     if (uiStates.isNotEmpty()) {
                         connectVpn(activity, uiStates.first().config, viewModel)
@@ -284,6 +309,10 @@ fun VpnStatusBanner(
     isActive: Boolean,
     activeNode: NodeUiState?,
     nodeCount: Int,
+    downloadSpeed: Long,
+    uploadSpeed: Long,
+    totalDownload: Long,
+    totalUpload: Long,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit
 ) {
@@ -305,7 +334,7 @@ fun VpnStatusBanner(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     if (isActive) "🟢 VPN активен" else "⚪ VPN отключен",
                     style = MaterialTheme.typography.titleMedium
@@ -314,6 +343,32 @@ fun VpnStatusBanner(
                     activeNode?.name ?: "$nodeCount нод",
                     style = MaterialTheme.typography.bodySmall
                 )
+                
+                // Show traffic stats when connected
+                if (isActive && (downloadSpeed > 0 || uploadSpeed > 0 || totalDownload > 0)) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            "↓ ${TrafficStats.formatSpeed(downloadSpeed)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            "↑ ${TrafficStats.formatSpeed(uploadSpeed)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    if (totalDownload > 1024 || totalUpload > 1024) {
+                        Text(
+                            "Всего: ↓${TrafficStats.formatBytes(totalDownload)} ↑${TrafficStats.formatBytes(totalUpload)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                }
             }
             
             if (isActive) {
