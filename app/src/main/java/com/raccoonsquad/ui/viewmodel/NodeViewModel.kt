@@ -55,9 +55,6 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _testingIds = MutableStateFlow<Set<String>>(emptySet())
     val testingUuids: StateFlow<Set<String>> = _testingIds.asStateFlow()
     
-    private val _testResults = MutableStateFlow<Map<String, Long>>(emptyMap())
-    val testResults: StateFlow<Map<String, Long>> = _testResults.asStateFlow()
-    
     private val _isAutoTesting = MutableStateFlow(false)
     val isAutoTesting: StateFlow<Boolean> = _isAutoTesting.asStateFlow()
     
@@ -132,7 +129,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     /**
-     * Test single node
+     * Test single node - updates latency directly in config
      */
     fun testNode(config: VlessConfig, method: NodeTester.TestMethod = NodeTester.TestMethod.TCP) {
         viewModelScope.launch {
@@ -142,28 +139,35 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             
             _testingIds.value = _testingIds.value - config.id
             
-            if (result.success) {
-                _testResults.value = _testResults.value + (config.id to result.latencyMs)
-            } else {
-                _testResults.value = _testResults.value + (config.id to -1L)
+            // Update latency directly in the config
+            val updatedConfig = config.copy(latency = if (result.success) result.latencyMs else -1L)
+            withContext(Dispatchers.IO) {
+                repository.updateNode(updatedConfig)
             }
         }
     }
     
     /**
-     * Test all nodes
+     * Test all nodes - updates latency directly in configs, batch update at end
      */
     fun testAllNodes(method: NodeTester.TestMethod = NodeTester.TestMethod.TCP) {
         viewModelScope.launch {
             val allNodes = nodes.value
             _testingIds.value = allNodes.map { it.id }.toSet()
             
-            val results = mutableMapOf<String, Long>()
+            val updatedConfigs = mutableListOf<VlessConfig>()
             
             allNodes.forEach { config ->
                 val result = NodeTester.testNode(config.serverAddress, config.port, method)
-                results[config.id] = if (result.success) result.latencyMs else -1L
-                _testResults.value = results.toMap()
+                val updatedConfig = config.copy(latency = if (result.success) result.latencyMs else -1L)
+                updatedConfigs.add(updatedConfig)
+                // Update testing IDs to show progress
+                _testingIds.value = _testingIds.value - config.id
+            }
+            
+            // Batch update all configs at once
+            withContext(Dispatchers.IO) {
+                updatedConfigs.forEach { repository.updateNode(it) }
             }
             
             _testingIds.value = emptySet()
@@ -288,7 +292,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             name = config.getDisplayName(),
             server = "${config.serverAddress}:${config.port}",
             cosmetics = config.getCosmeticsInfo(),
-            latency = _testResults.value[config.id] ?: config.latency,
+            latency = config.latency,
             isActive = config.id == activeId,
             hasFragment = config.fragmentationEnabled,
             hasNoise = config.noiseEnabled,

@@ -84,7 +84,6 @@ fun HomeScreen(
     val importError by viewModel.importError.collectAsState()
     val importCount by viewModel.importCount.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
-    val testResults by viewModel.testResults.collectAsState()
     val testingUuids by viewModel.testingUuids.collectAsState()
     val isAutoTesting by viewModel.isAutoTesting.collectAsState()
     
@@ -100,31 +99,34 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Create UI states with proper active state, sorted
-    val uiStates = remember(nodes, activeId, testResults, sortOrder) {
-        val list = nodes.mapIndexed { index, config -> 
-            NodeUiState(
-                id = config.id,
-                index = index,
-                name = config.getDisplayName(),
-                server = "${config.serverAddress}:${config.port}",
-                cosmetics = config.getCosmeticsInfo(),
-                latency = testResults[config.id] ?: config.latency,
-                isActive = config.id == activeId,
-                hasFragment = config.fragmentationEnabled,
-                hasNoise = config.noiseEnabled,
-                mtu = config.mtu,
-                isFavorite = config.isFavorite,
-                config = config
-            )
-        }
-        
-        when (sortOrder) {
-            SortOrder.FAVORITES_FIRST -> list.sortedByDescending { it.isFavorite }
-            SortOrder.NAME_ASC -> list.sortedBy { it.name.lowercase() }
-            SortOrder.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
-            SortOrder.PING_ASC -> list.sortedBy { it.latency ?: Long.MAX_VALUE }
-            SortOrder.PING_DESC -> list.sortedByDescending { it.latency ?: Long.MIN_VALUE }
+    // Create UI states - use derivedStateOf to prevent unnecessary recompositions
+    // Note: latency is stored directly in VlessConfig, not in separate testResults map
+    val uiStates by remember {
+        derivedStateOf {
+            val list = nodes.mapIndexed { index, config -> 
+                NodeUiState(
+                    id = config.id,
+                    index = index,
+                    name = config.getDisplayName(),
+                    server = "${config.serverAddress}:${config.port}",
+                    cosmetics = config.getCosmeticsInfo(),
+                    latency = config.latency,  // Use latency directly from config
+                    isActive = config.id == activeId,
+                    hasFragment = config.fragmentationEnabled,
+                    hasNoise = config.noiseEnabled,
+                    mtu = config.mtu,
+                    isFavorite = config.isFavorite,
+                    config = config
+                )
+            }
+            
+            when (sortOrder) {
+                SortOrder.FAVORITES_FIRST -> list.sortedByDescending { it.isFavorite }
+                SortOrder.NAME_ASC -> list.sortedBy { it.name.lowercase() }
+                SortOrder.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
+                SortOrder.PING_ASC -> list.sortedBy { it.latency ?: Long.MAX_VALUE }
+                SortOrder.PING_DESC -> list.sortedByDescending { it.latency ?: Long.MIN_VALUE }
+            }
         }
     }
     
