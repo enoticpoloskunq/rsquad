@@ -109,35 +109,22 @@ object XrayWrapper {
         
         val json = JSONObject()
         
-        // Log settings
+        // Log settings - use debug to see what's happening
         json.put("log", JSONObject().apply {
-            put("loglevel", "warning")
+            put("loglevel", "debug")
         })
         
-        // DNS settings - CRITICAL for resolving domains through VPN
+        // DNS settings - use simple DNS, not through proxy (to avoid circular dependency)
         json.put("dns", JSONObject().apply {
             put("tag", "dns-out")
-            put("hosts", JSONObject().apply {
-                // Block malware/tracking domains
-                put("geosite:category-ads-all", JSONArray().put("127.0.0.1"))
-            })
             put("servers", JSONArray().apply {
-                // Primary DNS through proxy (secure)
-                put(JSONObject().apply {
-                    put("tag", "google")
-                    put("address", "https://8.8.8.8/dns-query")
-                    put("detour", "proxy")
-                })
-                // Fallback DNS
-                put(JSONObject().apply {
-                    put("tag", "cloudflare")
-                    put("address", "https://1.1.1.1/dns-query")
-                    put("detour", "proxy")
-                })
-                // Local DNS for private domains
+                // Simple DNS servers - direct, not through proxy
+                // This avoids circular dependency (need DNS to connect to proxy)
+                put("8.8.8.8")
+                put("1.1.1.1")
+                // Fallback local
                 put("localhost")
             })
-            // Fallback if DoH fails
             put("queryStrategy", "UseIPv4")
         })
         
@@ -253,17 +240,17 @@ object XrayWrapper {
         
         json.put("outbounds", outbounds)
         
-        // Routing
+        // Routing - simple and correct
         json.put("routing", JSONObject().apply {
             put("domainStrategy", "IPIfNonMatch")
             put("rules", JSONArray().apply {
-                // DNS queries -> dns-out (through proxy)
+                // Block ads (optional)
                 put(JSONObject().apply {
                     put("type", "field")
-                    put("inboundTag", JSONArray().put("dns-in"))
-                    put("outboundTag", "dns-out")
+                    put("domain", JSONArray().put("geosite:category-ads-all"))
+                    put("outboundTag", "block")
                 })
-                // Private IPs -> direct
+                // Private IPs -> direct (for local network access)
                 put(JSONObject().apply {
                     put("type", "field")
                     put("ip", JSONArray().put("geoip:private"))
@@ -272,7 +259,11 @@ object XrayWrapper {
             })
         })
         
-        return json.toString(2)
+        // Log the generated config for debugging
+        val configStr = json.toString(2)
+        LogManager.d(TAG, "Generated Xray config:\n${configStr.take(500)}...")
+        
+        return configStr
     }
     
     /**
@@ -348,21 +339,43 @@ object XrayWrapper {
 /**
  * Core callback handler implementation for Xray core events
  */
-private object CoreCallback : CoreCallbackHandler {
+private object CoreCallback : CoreCallbackHandler() {
     private const val TAG = "XrayCallback"
     
     override fun startup(): Long {
         LogManager.i(TAG, "Xray core STARTED")
+        LogManager.flush()
         return 0
     }
     
     override fun shutdown(): Long {
         LogManager.i(TAG, "Xray core SHUTDOWN")
+        LogManager.flush()
         return 0
     }
     
-    override fun onEmitStatus(p0: Long, p1: String?): Long {
-        LogManager.d(TAG, "Xray status: $p0 - ${p1 ?: "null"}")
+    override fun onEmitStatus(code: Long, message: String?): Long {
+        // Log all Xray core messages
+        when {
+            message.isNullOrEmpty() -> LogManager.d(TAG, "Xray status: $code")
+            message.contains("error", ignoreCase = true) -> LogManager.e(TAG, "Xray: $message")
+            message.contains("warn", ignoreCase = true) -> LogManager.w(TAG, "Xray: $message")
+            else -> LogManager.d(TAG, "Xray: $message")
+        }
+        LogManager.flush()
+        return 0
+    }
+    
+    override fun onLog(level: Long, log: String?): Long {
+        log?.let {
+            when (level.toInt()) {
+                0 -> LogManager.d(TAG, it)  // debug
+                1 -> LogManager.i(TAG, it)  // info
+                2 -> LogManager.w(TAG, it)  // warning
+                3 -> LogManager.e(TAG, it)  // error
+                else -> LogManager.d(TAG, it)
+            }
+        }
         return 0
     }
 }
