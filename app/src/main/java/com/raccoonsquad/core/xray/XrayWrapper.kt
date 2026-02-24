@@ -114,16 +114,21 @@ object XrayWrapper {
             put("loglevel", "debug")
         })
         
-        // DNS settings - use simple DNS, not through proxy (to avoid circular dependency)
+        // DNS settings - DNS goes through proxy for external resolution
         json.put("dns", JSONObject().apply {
             put("tag", "dns-out")
             put("servers", JSONArray().apply {
-                // Simple DNS servers - direct, not through proxy
-                // This avoids circular dependency (need DNS to connect to proxy)
-                put("8.8.8.8")
-                put("1.1.1.1")
-                // Fallback local
-                put("localhost")
+                // Remote DNS through proxy
+                put(JSONObject().apply {
+                    put("address", "https://1.1.1.1/dns-query")
+                    put("tag", "remote-dns")
+                })
+                // Direct DNS for local/proxy server resolution
+                put(JSONObject().apply {
+                    put("address", "8.8.8.8")
+                    put("tag", "direct-dns")
+                    put("domains", JSONArray().put("geosite:private"))
+                })
             })
             put("queryStrategy", "UseIPv4")
         })
@@ -262,11 +267,18 @@ object XrayWrapper {
         json.put("routing", JSONObject().apply {
             put("domainStrategy", "IPIfNonMatch")
             put("rules", JSONArray().apply {
-                // DNS queries -> DNS outbound
+                // DNS (port 53) -> proxy (not dns-out!)
+                // DNS outbound is for internal Xray DNS, not for traffic
                 put(JSONObject().apply {
                     put("type", "field")
                     put("port", "53")
-                    put("outboundTag", "dns-out")
+                    put("outboundTag", "proxy")
+                })
+                // Private DNS (DoT port 853) -> proxy
+                put(JSONObject().apply {
+                    put("type", "field")
+                    put("port", "853")
+                    put("outboundTag", "proxy")
                 })
                 // Block ads
                 put(JSONObject().apply {
