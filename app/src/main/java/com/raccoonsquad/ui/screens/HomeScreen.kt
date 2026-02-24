@@ -318,16 +318,17 @@ fun HomeScreen(
             } else {
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     itemsIndexed(
                         items = uiStates,
-                        key = { _, node -> node.id }
+                        key = { _, node -> node.id },
+                        contentType = { _, _ -> "node" }
                     ) { _, node ->
                         NodeCard(
                             node = node,
-                            isTesting = testingUuids.contains(node.config.id),
+                            isTesting = false,
                             onClick = { onNodeClick(node.config.id) },
                             onToggle = {
                                 if (node.isActive) {
@@ -337,12 +338,8 @@ fun HomeScreen(
                                     connectVpn(activity, node.config, viewModel)
                                 }
                             },
-                            onTest = {
-                                viewModel.testNode(node.config)
-                            },
-                            onFavorite = {
-                                viewModel.toggleFavorite(node.config.id)
-                            }
+                            onTest = { },
+                            onFavorite = { }
                         )
                     }
                     
@@ -857,101 +854,54 @@ fun NodeCard(
     onTest: () -> Unit,
     onFavorite: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
+    // Use Surface instead of Card - lighter weight
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        tonalElevation = 1.dp,
+        shape = MaterialTheme.shapes.medium,
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Favorite star
-                    Text(
-                        text = if (node.isFavorite) "⭐" else "",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    
-                    Text(
-                        text = "${if (node.isActive) "🟢" else "⚪"} ${node.name}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    // Ping display
-                    val latency = node.latency
-                    if (latency != null && latency > 0) {
-                        Text(
-                            text = "${latency}ms",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = when {
-                                latency < 100 -> MaterialTheme.colorScheme.primary
-                                latency < 300 -> MaterialTheme.colorScheme.tertiary
-                                else -> MaterialTheme.colorScheme.error
-                            },
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    } else if (latency == -1L) {
-                        Text(
-                            text = "❌",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
-                
+            // Status icon + Favorite + Name in one line
+            Text(
+                text = buildString {
+                    append(if (node.isActive) "🟢 " else "⚪ ")
+                    if (node.isFavorite) append("⭐ ")
+                    append(node.name)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            
+            // Latency
+            val latency = node.latency
+            if (latency != null && latency > 0) {
                 Text(
-                    node.server,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = " ${latency}ms",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when {
+                        latency < 100 -> MaterialTheme.colorScheme.primary
+                        latency < 300 -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.error
+                    }
                 )
-                
-                // Show cosmetics info
-                if (node.cosmetics.isNotEmpty() && node.cosmetics != "no cosmetics") {
-                    Text(
-                        text = node.cosmetics,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+            } else if (latency == -1L) {
+                Text(" ❌", style = MaterialTheme.typography.labelSmall)
             }
             
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Favorite button
-                IconButton(onClick = onFavorite) {
-                    Icon(
-                        if (node.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = "Favorite"
-                    )
-                }
-                
-                // Test button
-                IconButton(
-                    onClick = onTest,
-                    enabled = !isTesting
-                ) {
-                    if (isTesting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Default.Speed, "Test")
-                    }
-                }
-                
-                Switch(
-                    checked = node.isActive,
-                    onCheckedChange = { onToggle() }
-                )
+            // Simple toggle icon instead of heavy Switch
+            TextButton(
+                onClick = onToggle,
+                modifier = Modifier.padding(start = 4.dp)
+            ) {
+                Text(if (node.isActive) "⏹" else "▶️", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

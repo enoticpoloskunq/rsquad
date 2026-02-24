@@ -1,6 +1,7 @@
 package com.raccoonsquad.ui.viewmodel
 
 import android.app.Application
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.raccoonsquad.core.util.NodeTester
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@Immutable
 data class NodeUiState(
     val id: String,
     val index: Int,
