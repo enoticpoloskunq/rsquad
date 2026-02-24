@@ -285,36 +285,42 @@ fun HomeScreen(
                         GlobalScope.launch(Dispatchers.IO) {
                             try {
                                 val client = okhttp3.OkHttpClient.Builder()
-                                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
                                     .build()
                                 
-                                // Get IP
-                                val ipRequest = okhttp3.Request.Builder()
-                                    .url("https://api.ipify.org?format=text")
+                                // Use ip-api.com - returns both IP and country in one request
+                                // This endpoint works over HTTP and is more reliable
+                                val request = okhttp3.Request.Builder()
+                                    .url("http://ip-api.com/json/")
                                     .get()
                                     .build()
-                                val ip = client.newCall(ipRequest).execute().body?.string()?.trim()
                                 
-                                // Get country
-                                var country: String? = null
-                                if (ip != null) {
-                                    val geoRequest = okhttp3.Request.Builder()
-                                        .url("http://ip-api.com/json/$ip")
-                                        .get()
-                                        .build()
-                                    val geoJson = client.newCall(geoRequest).execute().body?.string()
-                                    country = org.json.JSONObject(geoJson ?: "{}").optString("country", null)
-                                }
+                                val response = client.newCall(request).execute()
+                                val body = response.body?.string()
                                 
-                                withContext(Dispatchers.Main) {
-                                    exitIp = ip
-                                    exitCountry = country
-                                    isCheckingIp = false
+                                if (body != null) {
+                                    val json = org.json.JSONObject(body)
+                                    val ip = json.optString("query", "unknown")
+                                    val country = json.optString("country", "")
+                                    val city = json.optString("city", "")
+                                    val isp = json.optString("isp", "")
+                                    
+                                    withContext(Dispatchers.Main) {
+                                        exitIp = ip
+                                        exitCountry = if (country.isNotEmpty()) "$country ($city)" else null
+                                        isCheckingIp = false
+                                    }
+                                } else {
+                                    withContext(Dispatchers.Main) {
+                                        exitIp = "No response"
+                                        exitCountry = null
+                                        isCheckingIp = false
+                                    }
                                 }
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
-                                    exitIp = "Error: ${e.message}"
+                                    exitIp = "Error: ${e.message?.take(30)}"
                                     exitCountry = null
                                     isCheckingIp = false
                                 }
