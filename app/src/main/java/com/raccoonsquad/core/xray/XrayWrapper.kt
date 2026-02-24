@@ -114,6 +114,33 @@ object XrayWrapper {
             put("loglevel", "warning")
         })
         
+        // DNS settings - CRITICAL for resolving domains through VPN
+        json.put("dns", JSONObject().apply {
+            put("tag", "dns-out")
+            put("hosts", JSONObject().apply {
+                // Block malware/tracking domains
+                put("geosite:category-ads-all", JSONArray().put("127.0.0.1"))
+            })
+            put("servers", JSONArray().apply {
+                // Primary DNS through proxy (secure)
+                put(JSONObject().apply {
+                    put("tag", "google")
+                    put("address", "https://8.8.8.8/dns-query")
+                    put("detour", "proxy")
+                })
+                // Fallback DNS
+                put(JSONObject().apply {
+                    put("tag", "cloudflare")
+                    put("address", "https://1.1.1.1/dns-query")
+                    put("detour", "proxy")
+                })
+                // Local DNS for private domains
+                put("localhost")
+            })
+            // Fallback if DoH fails
+            put("queryStrategy", "UseIPv4")
+        })
+        
         // Inbounds - SOCKS5 and HTTP proxy
         val inbounds = JSONArray()
         
@@ -206,6 +233,12 @@ object XrayWrapper {
             })
         })
         
+        // DNS outbound - for DNS queries through proxy
+        outbounds.put(JSONObject().apply {
+            put("tag", "dns-out")
+            put("protocol", "dns")
+        })
+        
         // Direct outbound
         outbounds.put(JSONObject().apply {
             put("tag", "direct")
@@ -224,6 +257,12 @@ object XrayWrapper {
         json.put("routing", JSONObject().apply {
             put("domainStrategy", "IPIfNonMatch")
             put("rules", JSONArray().apply {
+                // DNS queries -> dns-out (through proxy)
+                put(JSONObject().apply {
+                    put("type", "field")
+                    put("inboundTag", JSONArray().put("dns-in"))
+                    put("outboundTag", "dns-out")
+                })
                 // Private IPs -> direct
                 put(JSONObject().apply {
                     put("type", "field")

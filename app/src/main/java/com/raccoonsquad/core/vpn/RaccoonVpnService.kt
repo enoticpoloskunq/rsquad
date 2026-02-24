@@ -147,8 +147,23 @@ class RaccoonVpnService : VpnService() {
                     .setMtu(mtu)
                     .addAddress("10.66.66.1", 24)
                     .addRoute("0.0.0.0", 0)
+                    // IPv6 support
+                    .addAddress("fd00:1::1", 64)
+                    .addRoute("::", 0)
+                    // DNS - these will be used by system resolver
+                    // Xray will handle actual DNS resolution through proxy
                     .addDnsServer("8.8.8.8")
                     .addDnsServer("1.1.1.1")
+                    .addDnsServer("2001:4860:4860::8888")
+                
+                // Try to set underlying networks (may help with some carriers)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                    try {
+                        builder.setUnderlyingNetworks(null)
+                    } catch (e: Throwable) {
+                        LogManager.w(TAG, "Could not set underlying networks")
+                    }
+                }
                 
                 try {
                     builder.addDisallowedApplication(packageName)
