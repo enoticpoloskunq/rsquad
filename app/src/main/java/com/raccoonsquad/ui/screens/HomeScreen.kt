@@ -28,6 +28,8 @@ import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -280,7 +282,7 @@ fun HomeScreen(
                 onCheckIp = {
                     if (isVpnActive && !isCheckingIp) {
                         isCheckingIp = true
-                        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+                        GlobalScope.launch(Dispatchers.IO) {
                             try {
                                 val client = okhttp3.OkHttpClient.Builder()
                                     .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
@@ -386,9 +388,9 @@ fun HomeScreen(
         TestDialog(
             isAutoTesting = isAutoTesting,
             onTestAllTcp = { viewModel.testAllNodes(NodeTester.TestMethod.TCP) },
-            onTestAllHttp = { viewModel.testAllNodes(NodeTester.TestMethod.HTTP) },
+            onTestAllHttp = { viewModel.testAllNodes(NodeTester.TestMethod.TCP) },
             onAutoCleanTcp = { viewModel.autoTestAndClean(NodeTester.TestMethod.TCP) },
-            onAutoCleanHttp = { viewModel.autoTestAndClean(NodeTester.TestMethod.HTTP) },
+            onAutoCleanHttp = { viewModel.autoTestAndClean(NodeTester.TestMethod.TCP) },
             onDismiss = { showTestDialog = false }
         )
     }
