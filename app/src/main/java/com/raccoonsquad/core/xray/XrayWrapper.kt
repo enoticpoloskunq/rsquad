@@ -114,21 +114,14 @@ object XrayWrapper {
             put("loglevel", "debug")
         })
         
-        // DNS settings - DNS goes through proxy for external resolution
+        // DNS settings - simple DNS through proxy
+        // Avoid DoH complexity - just use plain DNS through proxy
         json.put("dns", JSONObject().apply {
             put("tag", "dns-out")
             put("servers", JSONArray().apply {
-                // Remote DNS through proxy
-                put(JSONObject().apply {
-                    put("address", "https://1.1.1.1/dns-query")
-                    put("tag", "remote-dns")
-                })
-                // Direct DNS for local/proxy server resolution
-                put(JSONObject().apply {
-                    put("address", "8.8.8.8")
-                    put("tag", "direct-dns")
-                    put("domains", JSONArray().put("geosite:private"))
-                })
+                // DNS through proxy - simple UDP DNS
+                put("8.8.8.8")
+                put("1.1.1.1")
             })
             put("queryStrategy", "UseIPv4")
         })
@@ -243,12 +236,6 @@ object XrayWrapper {
             })
         })
         
-        // DNS outbound - for DNS queries through proxy
-        outbounds.put(JSONObject().apply {
-            put("tag", "dns-out")
-            put("protocol", "dns")
-        })
-        
         // Direct outbound
         outbounds.put(JSONObject().apply {
             put("tag", "direct")
@@ -267,18 +254,12 @@ object XrayWrapper {
         json.put("routing", JSONObject().apply {
             put("domainStrategy", "IPIfNonMatch")
             put("rules", JSONArray().apply {
-                // DNS (port 53) -> proxy (not dns-out!)
-                // DNS outbound is for internal Xray DNS, not for traffic
+                // Private IPs -> direct (for local network access)
+                // Must be BEFORE default route!
                 put(JSONObject().apply {
                     put("type", "field")
-                    put("port", "53")
-                    put("outboundTag", "proxy")
-                })
-                // Private DNS (DoT port 853) -> proxy
-                put(JSONObject().apply {
-                    put("type", "field")
-                    put("port", "853")
-                    put("outboundTag", "proxy")
+                    put("ip", JSONArray().put("geoip:private"))
+                    put("outboundTag", "direct")
                 })
                 // Block ads
                 put(JSONObject().apply {
@@ -286,13 +267,7 @@ object XrayWrapper {
                     put("domain", JSONArray().put("geosite:category-ads-all"))
                     put("outboundTag", "block")
                 })
-                // Private IPs -> direct (for local network access)
-                put(JSONObject().apply {
-                    put("type", "field")
-                    put("ip", JSONArray().put("geoip:private"))
-                    put("outboundTag", "direct")
-                })
-                // DEFAULT: All other traffic -> proxy
+                // DEFAULT: All other traffic -> proxy (includes DNS port 53, 853)
                 put(JSONObject().apply {
                     put("type", "field")
                     put("network", "tcp,udp")
