@@ -284,13 +284,20 @@ fun HomeScreen(
                         isCheckingIp = true
                         GlobalScope.launch(Dispatchers.IO) {
                             try {
+                                // Use SOCKS5 proxy provided by Xray (127.0.0.1:10808)
+                                // This ensures the request goes through VPN tunnel
+                                val proxy = java.net.Proxy(
+                                    java.net.Proxy.Type.SOCKS,
+                                    java.net.InetSocketAddress("127.0.0.1", 10808)
+                                )
+                                
                                 val client = okhttp3.OkHttpClient.Builder()
+                                    .proxy(proxy)
                                     .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
                                     .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
                                     .build()
                                 
                                 // Use ip-api.com - returns both IP and country in one request
-                                // This endpoint works over HTTP and is more reliable
                                 val request = okhttp3.Request.Builder()
                                     .url("http://ip-api.com/json/")
                                     .get()
