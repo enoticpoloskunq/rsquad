@@ -339,7 +339,7 @@ object XrayWrapper {
 /**
  * Core callback handler implementation for Xray core events
  */
-private object CoreCallback : CoreCallbackHandler() {
+private object CoreCallback : CoreCallbackHandler {
     private const val TAG = "XrayCallback"
     
     override fun startup(): Long {
