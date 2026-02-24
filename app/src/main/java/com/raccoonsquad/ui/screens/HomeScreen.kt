@@ -3,6 +3,14 @@ package com.raccoonsquad.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -168,6 +176,17 @@ fun HomeScreen(
             importCount < 0 -> {
                 snackbarHostState.showSnackbar("🗑️ Удалено ${-importCount} нерабочих нод")
                 viewModel.resetImportCount()
+            }
+        }
+    }
+    
+    // Close import dialog when importing finishes with success (no error)
+    LaunchedEffect(isImporting, importError) {
+        if (!isImporting && importError == null && importCount == 0) {
+            // Import finished without error - small delay then close
+            kotlinx.coroutines.delay(300)
+            if (!isImporting) {
+                showImportDialog = false
             }
         }
     }
@@ -347,27 +366,33 @@ fun HomeScreen(
                 ) {
                     itemsIndexed(
                         items = uiStates,
-                        key = { index, _ -> "node_$index" }
+                        key = { _, node -> node.id }
                     ) { _, node ->
-                        NodeCard(
-                            node = node,
-                            isTesting = testingUuids.contains(node.config.id),
-                            onClick = { onNodeClick(node.config.id) },
-                            onToggle = {
-                                if (node.isActive) {
-                                    VpnController.stopVpn(context)
-                                    viewModel.setActiveNode(null)
-                                } else {
-                                    connectVpn(activity, node.config, viewModel)
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + slideInVertically(),
+                            exit = fadeOut() + slideOutVertically()
+                        ) {
+                            NodeCard(
+                                node = node,
+                                isTesting = testingUuids.contains(node.config.id),
+                                onClick = { onNodeClick(node.config.id) },
+                                onToggle = {
+                                    if (node.isActive) {
+                                        VpnController.stopVpn(context)
+                                        viewModel.setActiveNode(null)
+                                    } else {
+                                        connectVpn(activity, node.config, viewModel)
+                                    }
+                                },
+                                onTest = {
+                                    viewModel.testNode(node.config)
+                                },
+                                onFavorite = {
+                                    viewModel.toggleFavorite(node.config.id)
                                 }
-                            },
-                            onTest = {
-                                viewModel.testNode(node.config)
-                            },
-                            onFavorite = {
-                                viewModel.toggleFavorite(node.config.id)
-                            }
-                        )
+                            )
+                        }
                     }
                     
                     item {
@@ -400,10 +425,39 @@ fun HomeScreen(
     if (showTestDialog) {
         TestDialog(
             isAutoTesting = isAutoTesting,
+            isVpnActive = isVpnActive,
             onTestAllTcp = { viewModel.testAllNodes(NodeTester.TestMethod.TCP) },
-            onTestAllHttp = { viewModel.testAllNodes(NodeTester.TestMethod.TCP) },
+            onTestUrl = {
+                // URL test uses SOCKS proxy when VPN is active
+                GlobalScope.launch(Dispatchers.IO) {
+                    try {
+                        val proxy = java.net.Proxy(
+                            java.net.Proxy.Type.SOCKS,
+                            java.net.InetSocketAddress("127.0.0.1", 10808)
+                        )
+                        val client = okhttp3.OkHttpClient.Builder()
+                            .proxy(proxy)
+                            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                            .build()
+                        val request = okhttp3.Request.Builder()
+                            .url("https://www.google.com/generate_204")
+                            .build()
+                        val response = client.newCall(request).execute()
+                        withContext(Dispatchers.Main) {
+                            if (response.isSuccessful || response.code == 204) {
+                                snackbarHostState.showSnackbar("✅ URL тест успешен!")
+                            } else {
+                                snackbarHostState.showSnackbar("❌ HTTP ${response.code}")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            snackbarHostState.showSnackbar("❌ Ошибка: ${e.message?.take(30)}")
+                        }
+                    }
+                }
+            },
             onAutoCleanTcp = { viewModel.autoTestAndClean(NodeTester.TestMethod.TCP) },
-            onAutoCleanHttp = { viewModel.autoTestAndClean(NodeTester.TestMethod.TCP) },
             onDismiss = { showTestDialog = false }
         )
     }
@@ -747,10 +801,10 @@ fun ImportDialog(
 @Composable
 fun TestDialog(
     isAutoTesting: Boolean,
+    isVpnActive: Boolean = false,
     onTestAllTcp: () -> Unit,
-    onTestAllHttp: () -> Unit,
+    onTestUrl: () -> Unit = {},
     onAutoCleanTcp: () -> Unit,
-    onAutoCleanHttp: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -758,6 +812,7 @@ fun TestDialog(
         title = { Text("Тестирование") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // TCP Ping section
                 Text("Быстрая проверка (TCP Ping):", style = MaterialTheme.typography.labelMedium)
                 Text(
                     "Проверяет только доступность порта сервера",
@@ -775,6 +830,30 @@ fun TestDialog(
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
+                // URL Test section - only when VPN is active
+                if (isVpnActive) {
+                    Text("Реальная проверка:", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        "Проверяет через активный VPN туннель",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    Button(
+                        onClick = onTestUrl,
+                        enabled = !isAutoTesting,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Text("🌐 URL тест через VPN")
+                    }
+                    
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                }
+                
+                // Auto-clean section
                 Text("Умная очистка:", style = MaterialTheme.typography.labelMedium)
                 Text(
                     "Удаляет ноды с недоступными портами",
@@ -802,9 +881,15 @@ fun TestDialog(
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
                 Text(
-                    "⚠️ TCP Ping не гарантирует работу VPN!\nДля реальной проверки - подключитесь и нажмите Check IP",
+                    if (isVpnActive) 
+                        "✅ VPN активен - можно проверить через туннель"
+                    else 
+                        "⚠️ TCP Ping не гарантирует работу VPN!\nПодключитесь для реальной проверки",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isVpnActive) 
+                        MaterialTheme.colorScheme.primary 
+                    else 
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
@@ -828,6 +913,7 @@ fun NodeCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize(animationSpec = tween(300))
             .clickable { onClick() }
     ) {
         Row(
