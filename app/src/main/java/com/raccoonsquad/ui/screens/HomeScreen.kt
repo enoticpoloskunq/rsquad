@@ -27,6 +27,9 @@ import com.raccoonsquad.core.stats.TrafficStats
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 enum class SortOrder {
     FAVORITES_FIRST, NAME_ASC, NAME_DESC, PING_ASC, PING_DESC
@@ -132,6 +135,11 @@ fun HomeScreen(
     var uploadSpeed by remember { mutableStateOf(0L) }
     var totalDownload by remember { mutableStateOf(0L) }
     var totalUpload by remember { mutableStateOf(0L) }
+    
+    // IP check state
+    var exitIp by remember { mutableStateOf<String?>(null) }
+    var exitCountry by remember { mutableStateOf<String?>(null) }
+    var isCheckingIp by remember { mutableStateOf(false) }
     
     // Update traffic stats
     DisposableEffect(isVpnActive) {
@@ -255,6 +263,9 @@ fun HomeScreen(
                 uploadSpeed = uploadSpeed,
                 totalDownload = totalDownload,
                 totalUpload = totalUpload,
+                exitIp = exitIp,
+                exitCountry = exitCountry,
+                isCheckingIp = isCheckingIp,
                 onConnect = {
                     if (uiStates.isNotEmpty()) {
                         connectVpn(activity, uiStates.first().config, viewModel)
@@ -263,6 +274,51 @@ fun HomeScreen(
                 onDisconnect = {
                     VpnController.stopVpn(context)
                     viewModel.setActiveNode(null)
+                    exitIp = null
+                    exitCountry = null
+                },
+                onCheckIp = {
+                    if (isVpnActive && !isCheckingIp) {
+                        isCheckingIp = true
+                        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+                            try {
+                                val client = okhttp3.OkHttpClient.Builder()
+                                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                                    .build()
+                                
+                                // Get IP
+                                val ipRequest = okhttp3.Request.Builder()
+                                    .url("https://api.ipify.org?format=text")
+                                    .get()
+                                    .build()
+                                val ip = client.newCall(ipRequest).execute().body?.string()?.trim()
+                                
+                                // Get country
+                                var country: String? = null
+                                if (ip != null) {
+                                    val geoRequest = okhttp3.Request.Builder()
+                                        .url("http://ip-api.com/json/$ip")
+                                        .get()
+                                        .build()
+                                    val geoJson = client.newCall(geoRequest).execute().body?.string()
+                                    country = org.json.JSONObject(geoJson ?: "{}").optString("country", null)
+                                }
+                                
+                                withContext(Dispatchers.Main) {
+                                    exitIp = ip
+                                    exitCountry = country
+                                    isCheckingIp = false
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    exitIp = "Error: ${e.message}"
+                                    exitCountry = null
+                                    isCheckingIp = false
+                                }
+                            }
+                        }
+                    }
                 }
             )
             
@@ -411,8 +467,12 @@ fun VpnStatusBanner(
     uploadSpeed: Long,
     totalDownload: Long,
     totalUpload: Long,
+    exitIp: String?,
+    exitCountry: String?,
+    isCheckingIp: Boolean,
     onConnect: () -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    onCheckIp: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -442,6 +502,28 @@ fun VpnStatusBanner(
                     style = MaterialTheme.typography.bodySmall
                 )
                 
+                // Show exit IP if available
+                if (isActive && exitIp != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            "🌐 $exitIp",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        if (exitCountry != null) {
+                            Text(
+                                "($exitCountry)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+                
                 // Show traffic stats when connected
                 if (isActive && (downloadSpeed > 0 || uploadSpeed > 0 || totalDownload > 0)) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -470,13 +552,35 @@ fun VpnStatusBanner(
             }
             
             if (isActive) {
-                Button(
-                    onClick = onDisconnect,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Стоп")
+                    Button(
+                        onClick = onCheckIp,
+                        enabled = !isCheckingIp,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        if (isCheckingIp) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onSecondary
+                            )
+                        } else {
+                            Text("Check IP")
+                        }
+                    }
+                    Button(
+                        onClick = onDisconnect,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Стоп")
+                    }
                 }
             } else if (nodeCount > 0) {
                 Button(onClick = onConnect) {
@@ -639,40 +743,39 @@ fun TestDialog(
         title = { Text("Тестирование") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Тест всех нод:", style = MaterialTheme.typography.labelMedium)
+                Text("Быстрая проверка (TCP Ping):", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    "Проверяет только доступность порта сервера",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onTestAllTcp, enabled = !isAutoTesting) {
-                        Text("TCP Ping")
-                    }
-                    Button(onClick = onTestAllHttp, enabled = !isAutoTesting) {
-                        Text("HTTP GET")
-                    }
+                Button(
+                    onClick = onTestAllTcp,
+                    enabled = !isAutoTesting,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("🔍 TCP Ping всех нод")
                 }
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
-                Text("Умная очистка (удалить нерабочие):", style = MaterialTheme.typography.labelMedium)
+                Text("Умная очистка:", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    "Удаляет ноды с недоступными портами",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
                 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onAutoCleanTcp,
-                        enabled = !isAutoTesting,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("TCP")
-                    }
-                    Button(
-                        onClick = onAutoCleanHttp,
-                        enabled = !isAutoTesting,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("HTTP")
-                    }
+                Button(
+                    onClick = onAutoCleanTcp,
+                    enabled = !isAutoTesting,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("🗑️ Удалить недоступные")
                 }
                 
                 if (isAutoTesting) {
@@ -680,6 +783,14 @@ fun TestDialog(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text("Тестирование...", style = MaterialTheme.typography.bodySmall)
                 }
+                
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                Text(
+                    "⚠️ TCP Ping не гарантирует работу VPN!\nДля реальной проверки - подключитесь и нажмите Check IP",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
         confirmButton = {
