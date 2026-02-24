@@ -332,20 +332,16 @@ fun HomeScreen(
             if (uiStates.isEmpty()) {
                 EmptyState(modifier = Modifier.fillMaxSize())
             } else if (!isListReady) {
-                // Show loading while warming up
+                // Minimal loading state
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Загрузка ${uiStates.size} нод...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        "🦝 ${uiStates.size}",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             } else {
                 LazyColumn(
