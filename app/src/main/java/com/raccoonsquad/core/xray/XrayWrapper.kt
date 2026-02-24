@@ -365,17 +365,4 @@ private object CoreCallback : CoreCallbackHandler() {
         LogManager.flush()
         return 0
     }
-    
-    override fun onLog(level: Long, log: String?): Long {
-        log?.let {
-            when (level.toInt()) {
-                0 -> LogManager.d(TAG, it)  // debug
-                1 -> LogManager.i(TAG, it)  // info
-                2 -> LogManager.w(TAG, it)  // warning
-                3 -> LogManager.e(TAG, it)  // error
-                else -> LogManager.d(TAG, it)
-            }
-        }
-        return 0
-    }
 }
