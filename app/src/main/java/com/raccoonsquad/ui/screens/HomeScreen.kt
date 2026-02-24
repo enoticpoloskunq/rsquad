@@ -15,8 +15,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -854,54 +856,86 @@ fun NodeCard(
     onTest: () -> Unit,
     onFavorite: () -> Unit
 ) {
-    // Use Surface instead of Card - lighter weight
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        tonalElevation = 1.dp,
-        shape = MaterialTheme.shapes.medium,
-        onClick = onClick
+    // Stable colors calculated once
+    val latencyColor = when {
+        node.latency == null -> MaterialTheme.colorScheme.onSurfaceVariant
+        node.latency < 100 -> Color(0xFF4CAF50)
+        node.latency < 300 -> Color(0xFFFF9800)
+        else -> Color(0xFFF44336)
+    }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (node.isActive) 
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            else 
+                MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (node.isActive) 2.dp else 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Status icon + Favorite + Name in one line
-            Text(
-                text = buildString {
-                    append(if (node.isActive) "🟢 " else "⚪ ")
-                    if (node.isFavorite) append("⭐ ")
-                    append(node.name)
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            
-            // Latency
-            val latency = node.latency
-            if (latency != null && latency > 0) {
-                Text(
-                    text = " ${latency}ms",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = when {
-                        latency < 100 -> MaterialTheme.colorScheme.primary
-                        latency < 300 -> MaterialTheme.colorScheme.tertiary
-                        else -> MaterialTheme.colorScheme.error
+            // Main content
+            Column(modifier = Modifier.weight(1f)) {
+                // Line 1: Status + Name + Ping
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (node.isActive) "🟢" else "⚪",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (node.isFavorite) {
+                        Text(" ⭐", style = MaterialTheme.typography.bodyMedium)
                     }
+                    Text(
+                        text = " ${node.name}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                        fontWeight = if (node.isActive) FontWeight.Bold else FontWeight.Normal
+                    )
+                    // Ping
+                    node.latency?.let { latency ->
+                        Text(
+                            text = if (latency > 0) " $latency ms" else " ✗",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = latencyColor
+                        )
+                    }
+                }
+                
+                // Line 2: Server address
+                Text(
+                    text = node.server,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
                 )
-            } else if (latency == -1L) {
-                Text(" ❌", style = MaterialTheme.typography.labelSmall)
             }
             
-            // Simple toggle icon instead of heavy Switch
-            TextButton(
-                onClick = onToggle,
-                modifier = Modifier.padding(start = 4.dp)
+            // Connect/Disconnect button
+            Box(
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(36.dp)
+                    .clickable { onToggle() },
+                contentAlignment = Alignment.Center
             ) {
-                Text(if (node.isActive) "⏹" else "▶️", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = if (node.isActive) "⏹" else "▶",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (node.isActive) 
+                        MaterialTheme.colorScheme.error 
+                    else 
+                        MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
