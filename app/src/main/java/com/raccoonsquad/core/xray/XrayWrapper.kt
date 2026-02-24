@@ -128,10 +128,24 @@ object XrayWrapper {
             put("queryStrategy", "UseIPv4")
         })
         
-        // Inbounds - SOCKS5 and HTTP proxy for local testing
-        // Note: TUN traffic is handled by libv2ray internally via tunFd
-        // No dokodemo-door needed - libv2ray routes TUN traffic to routing rules directly
+        // Inbounds - TUN (for VPN) + SOCKS5 and HTTP proxy
         val inbounds = JSONArray()
+        
+        // TUN inbound - uses tunFd from environment (set by libv2ray)
+        // This is the key inbound for VPN traffic!
+        inbounds.put(JSONObject().apply {
+            put("tag", "tun")
+            put("port", 0)  // Port 0 for TUN
+            put("protocol", "tun")
+            put("settings", JSONObject().apply {
+                put("name", "xray0")
+                put("mtu", config.mtu.toIntOrNull() ?: 1500)
+            })
+            put("sniffing", JSONObject().apply {
+                put("enabled", true)
+                put("destOverride", JSONArray().put("http").put("tls").put("quic"))
+            })
+        })
         
         // SOCKS5 proxy on localhost (for testing)
         inbounds.put(JSONObject().apply {
