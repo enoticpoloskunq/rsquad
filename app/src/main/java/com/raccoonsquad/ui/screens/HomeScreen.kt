@@ -3,14 +3,6 @@ package com.raccoonsquad.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -140,54 +132,21 @@ fun HomeScreen(
     // VPN is active if there's an active node ID
     val isVpnActive = activeId != null
     
-    // Traffic stats
-    var downloadSpeed by remember { mutableStateOf(0L) }
-    var uploadSpeed by remember { mutableStateOf(0L) }
-    var totalDownload by remember { mutableStateOf(0L) }
-    var totalUpload by remember { mutableStateOf(0L) }
-    
     // IP check state
     var exitIp by remember { mutableStateOf<String?>(null) }
     var exitCountry by remember { mutableStateOf<String?>(null) }
     var isCheckingIp by remember { mutableStateOf(false) }
     
-    // Update traffic stats
-    DisposableEffect(isVpnActive) {
-        if (isVpnActive) {
-            val listener: (Long, Long, Long, Long) -> Unit = { rx, tx, rxTotal, txTotal ->
-                downloadSpeed = rx
-                uploadSpeed = tx
-                totalDownload = rxTotal
-                totalUpload = txTotal
-            }
-            TrafficStats.addListener(listener)
-            onDispose { TrafficStats.removeListener(listener) }
-        }
-        onDispose { }
-    }
-    
+    // Handle import completion
     LaunchedEffect(importCount) {
-        when {
-            importCount > 0 -> {
+        if (importCount != 0) {
+            if (importCount > 0) {
                 snackbarHostState.showSnackbar("✅ Импортировано $importCount нод")
-                viewModel.resetImportCount()
-                showImportDialog = false
-            }
-            importCount < 0 -> {
+            } else if (importCount < 0) {
                 snackbarHostState.showSnackbar("🗑️ Удалено ${-importCount} нерабочих нод")
-                viewModel.resetImportCount()
             }
-        }
-    }
-    
-    // Close import dialog when importing finishes with success (no error)
-    LaunchedEffect(isImporting, importError) {
-        if (!isImporting && importError == null && importCount == 0) {
-            // Import finished without error - small delay then close
-            kotlinx.coroutines.delay(300)
-            if (!isImporting) {
-                showImportDialog = false
-            }
+            showImportDialog = false
+            viewModel.resetImportCount()
         }
     }
     
@@ -280,10 +239,6 @@ fun HomeScreen(
                 isActive = isVpnActive,
                 activeNode = activeNode,
                 nodeCount = uiStates.size,
-                downloadSpeed = downloadSpeed,
-                uploadSpeed = uploadSpeed,
-                totalDownload = totalDownload,
-                totalUpload = totalUpload,
                 exitIp = exitIp,
                 exitCountry = exitCountry,
                 isCheckingIp = isCheckingIp,
@@ -368,31 +323,25 @@ fun HomeScreen(
                         items = uiStates,
                         key = { _, node -> node.id }
                     ) { _, node ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn() + slideInVertically(),
-                            exit = fadeOut() + slideOutVertically()
-                        ) {
-                            NodeCard(
-                                node = node,
-                                isTesting = testingUuids.contains(node.config.id),
-                                onClick = { onNodeClick(node.config.id) },
-                                onToggle = {
-                                    if (node.isActive) {
-                                        VpnController.stopVpn(context)
-                                        viewModel.setActiveNode(null)
-                                    } else {
-                                        connectVpn(activity, node.config, viewModel)
-                                    }
-                                },
-                                onTest = {
-                                    viewModel.testNode(node.config)
-                                },
-                                onFavorite = {
-                                    viewModel.toggleFavorite(node.config.id)
+                        NodeCard(
+                            node = node,
+                            isTesting = testingUuids.contains(node.config.id),
+                            onClick = { onNodeClick(node.config.id) },
+                            onToggle = {
+                                if (node.isActive) {
+                                    VpnController.stopVpn(context)
+                                    viewModel.setActiveNode(null)
+                                } else {
+                                    connectVpn(activity, node.config, viewModel)
                                 }
-                            )
-                        }
+                            },
+                            onTest = {
+                                viewModel.testNode(node.config)
+                            },
+                            onFavorite = {
+                                viewModel.toggleFavorite(node.config.id)
+                            }
+                        )
                     }
                     
                     item {
@@ -532,10 +481,6 @@ fun VpnStatusBanner(
     isActive: Boolean,
     activeNode: NodeUiState?,
     nodeCount: Int,
-    downloadSpeed: Long,
-    uploadSpeed: Long,
-    totalDownload: Long,
-    totalUpload: Long,
     exitIp: String?,
     exitCountry: String?,
     isCheckingIp: Boolean,
@@ -543,6 +488,22 @@ fun VpnStatusBanner(
     onDisconnect: () -> Unit,
     onCheckIp: () -> Unit
 ) {
+    // Read traffic stats directly to avoid parent recomposition
+    var trafficText by remember { mutableStateOf("") }
+    
+    DisposableEffect(isActive) {
+        if (isActive) {
+            val listener: (Long, Long, Long, Long) -> Unit = { rx, tx, _, _ ->
+                trafficText = "↓ ${TrafficStats.formatSpeed(rx)}  ↑ ${TrafficStats.formatSpeed(tx)}"
+            }
+            TrafficStats.addListener(listener)
+            onDispose { TrafficStats.removeListener(listener) }
+        } else {
+            trafficText = ""
+            onDispose { }
+        }
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -594,29 +555,13 @@ fun VpnStatusBanner(
                 }
                 
                 // Show traffic stats when connected
-                if (isActive && (downloadSpeed > 0 || uploadSpeed > 0 || totalDownload > 0)) {
+                if (isActive && trafficText.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            "↓ ${TrafficStats.formatSpeed(downloadSpeed)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            "↑ ${TrafficStats.formatSpeed(uploadSpeed)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    if (totalDownload > 1024 || totalUpload > 1024) {
-                        Text(
-                            "Всего: ↓${TrafficStats.formatBytes(totalDownload)} ↑${TrafficStats.formatBytes(totalUpload)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                    }
+                    Text(
+                        trafficText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
             }
             

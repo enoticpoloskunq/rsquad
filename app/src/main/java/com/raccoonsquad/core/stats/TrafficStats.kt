@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 object TrafficStats {
     private const val TAG = "TrafficStats"
-    private const val UPDATE_INTERVAL_MS = 1000L
+    private const val UPDATE_INTERVAL_MS = 2000L  // Update every 2 seconds instead of 1
     
     private var lastRxBytes = 0L
     private var lastTxBytes = 0L
