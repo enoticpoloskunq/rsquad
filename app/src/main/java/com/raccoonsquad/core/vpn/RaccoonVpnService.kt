@@ -219,12 +219,12 @@ class RaccoonVpnService : VpnService() {
                 }
             }
             
-            // Save last connected UUID for tile
+            // Save last connected ID for tile
             try {
                 val sharedPrefs = getSharedPreferences("raccoon_prefs", MODE_PRIVATE)
-                sharedPrefs.edit().putString("last_connected_uuid", config.uuid).apply()
+                sharedPrefs.edit().putString("last_connected_id", config.id).apply()
             } catch (e: Throwable) {
-                LogManager.w(TAG, "Could not save last UUID")
+                LogManager.w(TAG, "Could not save last ID")
             }
             
             // Update notification

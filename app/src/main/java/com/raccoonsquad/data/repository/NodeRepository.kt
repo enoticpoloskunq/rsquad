@@ -18,7 +18,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class NodeRepository(private val context: Context) {
     
     private val nodesKey = stringPreferencesKey("saved_nodes")
-    private val activeNodeKey = stringPreferencesKey("active_node_uuid")
+    private val activeNodeKey = stringPreferencesKey("active_node_id")
     
     private var cachedNodes: List<VlessConfig> = emptyList()
     
@@ -40,7 +40,7 @@ class NodeRepository(private val context: Context) {
         parsed
     }
     
-    val activeNodeUuid: Flow<String?> = context.dataStore.data.map { prefs ->
+    val activeNodeId: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[activeNodeKey]
     }
     
@@ -49,10 +49,10 @@ class NodeRepository(private val context: Context) {
             val currentNodes = prefs[nodesKey] ?: "[]"
             val jsonArray = JSONArray(currentNodes)
             
-            // Check for duplicate UUID
+            // Check for duplicate ID
             var exists = false
             for (i in 0 until jsonArray.length()) {
-                if (jsonArray.getJSONObject(i).getString("uuid") == config.uuid) {
+                if (jsonArray.getJSONObject(i).getString("id") == config.id) {
                     exists = true
                     break
                 }
@@ -79,21 +79,21 @@ class NodeRepository(private val context: Context) {
         }
     }
     
-    suspend fun deleteNode(uuid: String) {
+    suspend fun deleteNode(id: String) {
         context.dataStore.edit { prefs ->
             val currentNodes = prefs[nodesKey] ?: "[]"
             val jsonArray = JSONArray(currentNodes)
             val newArray = JSONArray()
             for (i in 0 until jsonArray.length()) {
                 val node = jsonArray.getJSONObject(i)
-                if (node.getString("uuid") != uuid) {
+                if (node.getString("id") != id) {
                     newArray.put(node)
                 }
             }
             prefs[nodesKey] = newArray.toString()
             
             // Clear active if this was the active node
-            if (prefs[activeNodeKey] == uuid) {
+            if (prefs[activeNodeKey] == id) {
                 prefs.remove(activeNodeKey)
             }
         }
@@ -106,10 +106,10 @@ class NodeRepository(private val context: Context) {
         }
     }
     
-    suspend fun setActiveNode(uuid: String?) {
+    suspend fun setActiveNode(id: String?) {
         context.dataStore.edit { prefs ->
-            if (uuid != null) {
-                prefs[activeNodeKey] = uuid
+            if (id != null) {
+                prefs[activeNodeKey] = id
             } else {
                 prefs.remove(activeNodeKey)
             }
@@ -124,7 +124,7 @@ class NodeRepository(private val context: Context) {
             
             for (i in 0 until jsonArray.length()) {
                 val node = jsonArray.getJSONObject(i)
-                if (node.getString("uuid") == config.uuid) {
+                if (node.getString("id") == config.id) {
                     newArray.put(configToJson(config))
                 } else {
                     newArray.put(node)
@@ -135,7 +135,7 @@ class NodeRepository(private val context: Context) {
         }
     }
     
-    suspend fun toggleFavorite(uuid: String) {
+    suspend fun toggleFavorite(id: String) {
         context.dataStore.edit { prefs ->
             val currentNodes = prefs[nodesKey] ?: "[]"
             val jsonArray = JSONArray(currentNodes)
@@ -143,7 +143,7 @@ class NodeRepository(private val context: Context) {
             
             for (i in 0 until jsonArray.length()) {
                 val node = jsonArray.getJSONObject(i)
-                if (node.getString("uuid") == uuid) {
+                if (node.getString("id") == id) {
                     val config = jsonToConfig(node)
                     val updated = config.copy(isFavorite = !config.isFavorite)
                     newArray.put(configToJson(updated))
@@ -180,6 +180,7 @@ class NodeRepository(private val context: Context) {
     
     private fun configToJson(config: VlessConfig): JSONObject {
         return JSONObject().apply {
+            put("id", config.id)
             put("uuid", config.uuid)
             put("serverAddress", config.serverAddress)
             put("port", config.port)
@@ -208,6 +209,7 @@ class NodeRepository(private val context: Context) {
     
     private fun jsonToConfig(obj: JSONObject): VlessConfig {
         return VlessConfig(
+            id = obj.optString("id", java.util.UUID.randomUUID().toString()),
             uuid = obj.getString("uuid"),
             serverAddress = obj.getString("serverAddress"),
             port = obj.getInt("port"),

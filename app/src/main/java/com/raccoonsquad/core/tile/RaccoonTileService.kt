@@ -42,14 +42,14 @@ class RaccoonTileService : TileService() {
 
     private fun connectToLastNode() {
         val sharedPrefs = getSharedPreferences("raccoon_prefs", MODE_PRIVATE)
-        val lastUuid = sharedPrefs.getString("last_connected_uuid", null)
+        val lastId = sharedPrefs.getString("last_connected_id", null)
         
-        LogManager.i(TAG, "Last UUID: $lastUuid")
+        LogManager.i(TAG, "Last ID: $lastId")
         
-        if (lastUuid != null) {
+        if (lastId != null) {
             val repository = NodeRepository.getInstance(this)
             val nodes = repository.getNodesSync()
-            val node = nodes.find { it.uuid == lastUuid }
+            val node = nodes.find { it.id == lastId }
             
             if (node != null) {
                 LogManager.i(TAG, "Found node: ${node.name}")
@@ -71,7 +71,7 @@ class RaccoonTileService : TileService() {
         }
 
         val sharedPrefs = getSharedPreferences("raccoon_prefs", MODE_PRIVATE)
-        sharedPrefs.edit().putString("last_connected_uuid", node.uuid).apply()
+        sharedPrefs.edit().putString("last_connected_id", node.id).apply()
 
         val intent = Intent(this, RaccoonVpnService::class.java).apply {
             action = RaccoonVpnService.ACTION_CONNECT

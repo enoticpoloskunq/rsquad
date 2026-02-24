@@ -39,7 +39,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     val nodes: StateFlow<List<VlessConfig>> = repository.nodes
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     
-    val activeNodeUuid: StateFlow<String?> = repository.activeNodeUuid
+    val activeNodeId: StateFlow<String?> = repository.activeNodeId
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
     
     private val _importError = MutableStateFlow<String?>(null)
@@ -52,8 +52,8 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
     
     // Testing states
-    private val _testingUuids = MutableStateFlow<Set<String>>(emptySet())
-    val testingUuids: StateFlow<Set<String>> = _testingUuids.asStateFlow()
+    private val _testingIds = MutableStateFlow<Set<String>>(emptySet())
+    val testingUuids: StateFlow<Set<String>> = _testingIds.asStateFlow()
     
     private val _testResults = MutableStateFlow<Map<String, Long>>(emptyMap())
     val testResults: StateFlow<Map<String, Long>> = _testResults.asStateFlow()
@@ -136,16 +136,16 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun testNode(config: VlessConfig, method: NodeTester.TestMethod = NodeTester.TestMethod.TCP) {
         viewModelScope.launch {
-            _testingUuids.value = _testingUuids.value + config.uuid
+            _testingIds.value = _testingIds.value + config.id
             
             val result = NodeTester.testNode(config.serverAddress, config.port, method)
             
-            _testingUuids.value = _testingUuids.value - config.uuid
+            _testingIds.value = _testingIds.value - config.id
             
             if (result.success) {
-                _testResults.value = _testResults.value + (config.uuid to result.latencyMs)
+                _testResults.value = _testResults.value + (config.id to result.latencyMs)
             } else {
-                _testResults.value = _testResults.value + (config.uuid to -1L)
+                _testResults.value = _testResults.value + (config.id to -1L)
             }
         }
     }
@@ -156,17 +156,17 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     fun testAllNodes(method: NodeTester.TestMethod = NodeTester.TestMethod.TCP) {
         viewModelScope.launch {
             val allNodes = nodes.value
-            _testingUuids.value = allNodes.map { it.uuid }.toSet()
+            _testingIds.value = allNodes.map { it.id }.toSet()
             
             val results = mutableMapOf<String, Long>()
             
             allNodes.forEach { config ->
                 val result = NodeTester.testNode(config.serverAddress, config.port, method)
-                results[config.uuid] = if (result.success) result.latencyMs else -1L
+                results[config.id] = if (result.success) result.latencyMs else -1L
                 _testResults.value = results.toMap()
             }
             
-            _testingUuids.value = emptySet()
+            _testingIds.value = emptySet()
         }
     }
     
@@ -178,30 +178,30 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             _isAutoTesting.value = true
             
             val allNodes = nodes.value
-            val failedUuids = mutableListOf<String>()
+            val failedIds = mutableListOf<String>()
             
             allNodes.forEach { config ->
                 val result = NodeTester.testNode(config.serverAddress, config.port, method)
                 if (!result.success) {
-                    failedUuids.add(config.uuid)
+                    failedIds.add(config.id)
                 }
             }
             
             // Remove failed nodes
-            if (failedUuids.isNotEmpty()) {
+            if (failedIds.isNotEmpty()) {
                 withContext(Dispatchers.IO) {
-                    failedUuids.forEach { repository.deleteNode(it) }
+                    failedIds.forEach { repository.deleteNode(it) }
                 }
-                _importCount.value = -failedUuids.size // Negative to indicate removal
+                _importCount.value = -failedIds.size // Negative to indicate removal
             }
             
             _isAutoTesting.value = false
         }
     }
     
-    fun deleteNode(uuid: String) {
+    fun deleteNode(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.deleteNode(uuid)
+            repository.deleteNode(id)
         }
     }
     
@@ -211,25 +211,25 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
-    fun setActiveNode(uuid: String?) {
+    fun setActiveNode(id: String?) {
         viewModelScope.launch {
-            repository.setActiveNode(uuid)
+            repository.setActiveNode(id)
         }
     }
     
-    fun toggleFavorite(uuid: String) {
+    fun toggleFavorite(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.toggleFavorite(uuid)
+            repository.toggleFavorite(id)
         }
     }
     
     /**
      * Apply cosmetic preset to a single node
      */
-    fun applyPreset(uuid: String, presetId: String) {
+    fun applyPreset(id: String, presetId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val allNodes = nodes.value
-            val node = allNodes.find { it.uuid == uuid } ?: return@launch
+            val node = allNodes.find { it.id == id } ?: return@launch
             val updated = CosmeticPresets.applyPreset(presetId, node)
             repository.updateNode(updated)
         }
@@ -251,10 +251,10 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Randomize cosmetics for a single node
      */
-    fun randomizeCosmetics(uuid: String) {
+    fun randomizeCosmetics(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val allNodes = nodes.value
-            val node = allNodes.find { it.uuid == uuid } ?: return@launch
+            val node = allNodes.find { it.id == id } ?: return@launch
             val updated = CosmeticPresets.randomize(node)
             repository.updateNode(updated)
         }
@@ -281,15 +281,15 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         _importCount.value = 0
     }
     
-    fun toUiState(config: VlessConfig, activeUuid: String?, index: Int): NodeUiState {
+    fun toUiState(config: VlessConfig, activeId: String?, index: Int): NodeUiState {
         return NodeUiState(
-            id = "${config.uuid}_$index",
+            id = config.id,
             index = index,
             name = config.getDisplayName(),
             server = "${config.serverAddress}:${config.port}",
             cosmetics = config.getCosmeticsInfo(),
-            latency = _testResults.value[config.uuid] ?: config.latency,
-            isActive = config.uuid == activeUuid,
+            latency = _testResults.value[config.id] ?: config.latency,
+            isActive = config.id == activeId,
             hasFragment = config.fragmentationEnabled,
             hasNoise = config.noiseEnabled,
             mtu = config.mtu,

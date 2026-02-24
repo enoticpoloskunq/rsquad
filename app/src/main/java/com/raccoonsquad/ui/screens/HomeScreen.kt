@@ -39,7 +39,7 @@ object VpnController {
     fun onPermissionGranted(context: android.content.Context) {
         pendingConfig?.let { config ->
             startVpn(context, config)
-            pendingViewModel?.setActiveNode(config.uuid)
+            pendingViewModel?.setActiveNode(config.id)
         }
         clear()
     }
@@ -75,7 +75,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val activity = context as? Activity
     val nodes by viewModel.nodes.collectAsState()
-    val activeUuid by viewModel.activeNodeUuid.collectAsState()
+    val activeId by viewModel.activeNodeId.collectAsState()
     val importError by viewModel.importError.collectAsState()
     val importCount by viewModel.importCount.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
@@ -96,16 +96,16 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     
     // Create UI states with proper active state, sorted
-    val uiStates = remember(nodes, activeUuid, testResults, sortOrder) {
+    val uiStates = remember(nodes, activeId, testResults, sortOrder) {
         val list = nodes.mapIndexed { index, config -> 
             NodeUiState(
-                id = "node_$index",
+                id = config.id,
                 index = index,
                 name = config.getDisplayName(),
                 server = "${config.serverAddress}:${config.port}",
                 cosmetics = config.getCosmeticsInfo(),
-                latency = testResults[config.uuid] ?: config.latency,
-                isActive = config.uuid == activeUuid,
+                latency = testResults[config.id] ?: config.latency,
+                isActive = config.id == activeId,
                 hasFragment = config.fragmentationEnabled,
                 hasNoise = config.noiseEnabled,
                 mtu = config.mtu,
@@ -124,8 +124,8 @@ fun HomeScreen(
     }
     
     val activeNode = uiStates.find { it.isActive }
-    // VPN is active if there's an active node UUID
-    val isVpnActive = activeUuid != null
+    // VPN is active if there's an active node ID
+    val isVpnActive = activeId != null
     
     // Traffic stats
     var downloadSpeed by remember { mutableStateOf(0L) }
@@ -280,8 +280,8 @@ fun HomeScreen(
                     ) { _, node ->
                         NodeCard(
                             node = node,
-                            isTesting = testingUuids.contains(node.config.uuid),
-                            onClick = { onNodeClick(node.config.uuid) },
+                            isTesting = testingUuids.contains(node.config.id),
+                            onClick = { onNodeClick(node.config.id) },
                             onToggle = {
                                 if (node.isActive) {
                                     VpnController.stopVpn(context)
@@ -294,7 +294,7 @@ fun HomeScreen(
                                 viewModel.testNode(node.config)
                             },
                             onFavorite = {
-                                viewModel.toggleFavorite(node.config.uuid)
+                                viewModel.toggleFavorite(node.config.id)
                             }
                         )
                     }
@@ -390,7 +390,7 @@ private fun connectVpn(
         activity.startActivityForResult(intent, 1234)
     } else {
         VpnController.startVpn(activity, config)
-        viewModel.setActiveNode(config.uuid)
+        viewModel.setActiveNode(config.id)
     }
 }
 

@@ -10,8 +10,11 @@ import android.os.Parcelable
  * VPN clients ignore but are crucial for bypassing censorship.
  */
 data class VlessConfig(
+    // Unique internal ID (generated on import)
+    val id: String = java.util.UUID.randomUUID().toString(),
+
     // Core settings
-    val uuid: String,
+    val uuid: String,  // Auth UUID from VLESS URI (same for all nodes from same subscription!)
     val serverAddress: String,
     val port: Int,
     val name: String = "VLESS Node",
@@ -116,6 +119,7 @@ data class VlessConfig(
     }
     
     constructor(parcel: Parcel) : this(
+        id = parcel.readString() ?: java.util.UUID.randomUUID().toString(),
         uuid = parcel.readString() ?: "",
         serverAddress = parcel.readString() ?: "",
         port = parcel.readInt(),
@@ -145,6 +149,7 @@ data class VlessConfig(
     )
     
     override fun writeToParcel(parcel: Parcel, flags: Int) {
+        parcel.writeString(id)
         parcel.writeString(uuid)
         parcel.writeString(serverAddress)
         parcel.writeInt(port)
