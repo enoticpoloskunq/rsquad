@@ -101,6 +101,20 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     
+    // Warm-up state - show loading briefly while Compose initializes
+    var isListReady by remember { mutableStateOf(false) }
+    
+    // Warm up the list when nodes are first loaded
+    LaunchedEffect(nodes.size) {
+        if (nodes.isNotEmpty() && !isListReady) {
+            // Small delay to let Compose warm up the LazyColumn
+            kotlinx.coroutines.delay(300)
+            isListReady = true
+        } else if (nodes.isEmpty()) {
+            isListReady = true
+        }
+    }
+    
     // Create UI states - use derivedStateOf to prevent unnecessary recompositions
     // Note: latency is stored directly in VlessConfig, not in separate testResults map
     val uiStates by remember {
@@ -317,6 +331,22 @@ fun HomeScreen(
             
             if (uiStates.isEmpty()) {
                 EmptyState(modifier = Modifier.fillMaxSize())
+            } else if (!isListReady) {
+                // Show loading while warming up
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Загрузка ${uiStates.size} нод...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             } else {
                 LazyColumn(
                     state = listState,
