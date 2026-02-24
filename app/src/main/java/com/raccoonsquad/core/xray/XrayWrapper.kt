@@ -240,11 +240,17 @@ object XrayWrapper {
         
         json.put("outbounds", outbounds)
         
-        // Routing - simple and correct
+        // Routing - with default route to proxy
         json.put("routing", JSONObject().apply {
             put("domainStrategy", "IPIfNonMatch")
             put("rules", JSONArray().apply {
-                // Block ads (optional)
+                // DNS queries -> DNS outbound
+                put(JSONObject().apply {
+                    put("type", "field")
+                    put("port", "53")
+                    put("outboundTag", "dns-out")
+                })
+                // Block ads
                 put(JSONObject().apply {
                     put("type", "field")
                     put("domain", JSONArray().put("geosite:category-ads-all"))
@@ -256,12 +262,18 @@ object XrayWrapper {
                     put("ip", JSONArray().put("geoip:private"))
                     put("outboundTag", "direct")
                 })
+                // DEFAULT: All other traffic -> proxy
+                put(JSONObject().apply {
+                    put("type", "field")
+                    put("network", "tcp,udp")
+                    put("outboundTag", "proxy")
+                })
             })
         })
         
-        // Log the generated config for debugging
+        // Log the generated config for debugging (full config)
         val configStr = json.toString(2)
-        LogManager.d(TAG, "Generated Xray config:\n${configStr.take(500)}...")
+        LogManager.d(TAG, "Generated Xray config:\n$configStr")
         
         return configStr
     }
