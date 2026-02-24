@@ -858,7 +858,6 @@ fun NodeCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(animationSpec = tween(300))
             .clickable { onClick() }
     ) {
         Row(
