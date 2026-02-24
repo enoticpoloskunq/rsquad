@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Traffic statistics tracker for VPN connection
+ * Uses VPN service stats instead of UID stats
  */
 object TrafficStats {
     private const val TAG = "TrafficStats"
@@ -23,9 +24,12 @@ object TrafficStats {
     private val currentRxSpeed = AtomicLong(0)
     private val currentTxSpeed = AtomicLong(0)
     
-    private var uid: Int = -1
     private var isTracking = false
     private val handler = Handler(Looper.getMainLooper())
+    
+    // Callback to get traffic from VPN service
+    private var getRxBytes: (() -> Long)? = null
+    private var getTxBytes: (() -> Long)? = null
     
     private val listeners = mutableListOf<(rxSpeed: Long, txSpeed: Long, totalRx: Long, totalTx: Long) -> Unit>()
     
@@ -39,27 +43,60 @@ object TrafficStats {
     val totalDownloadedFormatted: String get() = formatBytes(totalRx.get())
     val totalUploadedFormatted: String get() = formatBytes(totalTx.get())
     
-    fun startTracking(appUid: Int) {
+    /**
+     * Start tracking with custom byte counters (for VPN service)
+     */
+    fun startTracking(
+        rxBytesProvider: () -> Long,
+        txBytesProvider: () -> Long
+    ) {
         if (isTracking) return
         
-        uid = appUid
+        getRxBytes = rxBytesProvider
+        getTxBytes = txBytesProvider
         isTracking = true
         
-        lastRxBytes = TrafficStats.getUidRxBytes(uid)
-        lastTxBytes = TrafficStats.getUidTxBytes(uid)
+        lastRxBytes = rxBytesProvider()
+        lastTxBytes = txBytesProvider()
         lastUpdateTime = System.currentTimeMillis()
         totalRx.set(0)
         totalTx.set(0)
         currentRxSpeed.set(0)
         currentTxSpeed.set(0)
         
-        LogManager.i(TAG, "Started tracking traffic for UID=$uid")
+        LogManager.i(TAG, "Started tracking traffic")
+        handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
+    }
+    
+    /**
+     * Legacy method - uses UID stats (may not work for VPN)
+     */
+    fun startTracking(appUid: Int) {
+        if (isTracking) return
+        isTracking = true
+        
+        lastRxBytes = TrafficStats.getUidRxBytes(appUid)
+        lastTxBytes = TrafficStats.getUidTxBytes(appUid)
+        lastUpdateTime = System.currentTimeMillis()
+        totalRx.set(0)
+        totalTx.set(0)
+        currentRxSpeed.set(0)
+        currentTxSpeed.set(0)
+        
+        LogManager.i(TAG, "Started tracking traffic for UID=$appUid (legacy mode)")
+        
+        // Use legacy providers
+        getRxBytes = { TrafficStats.getUidRxBytes(appUid) }
+        getTxBytes = { TrafficStats.getUidTxBytes(appUid) }
+        
         handler.postDelayed(updateRunnable, UPDATE_INTERVAL_MS)
     }
     
     fun stopTracking() {
         isTracking = false
         handler.removeCallbacks(updateRunnable)
+        getRxBytes = null
+        getTxBytes = null
         LogManager.i(TAG, "Stopped tracking. Total: ↓${formatBytes(totalRx.get())} ↑${formatBytes(totalTx.get())}")
     }
     
@@ -76,30 +113,39 @@ object TrafficStats {
             if (!isTracking) return
             
             try {
-                val currentRx = TrafficStats.getUidRxBytes(uid)
-                val currentTx = TrafficStats.getUidTxBytes(uid)
-                val currentTime = System.currentTimeMillis()
+                val rxProvider = getRxBytes
+                val txProvider = getTxBytes
                 
-                val timeDiff = currentTime - lastUpdateTime
-                if (timeDiff > 0) {
-                    val rxDiff = currentRx - lastRxBytes
-                    val txDiff = currentTx - lastTxBytes
+                if (rxProvider != null && txProvider != null) {
+                    val currentRx = rxProvider()
+                    val currentTx = txProvider()
+                    val currentTime = System.currentTimeMillis()
                     
-                    val rxSpeed = (rxDiff * 1000 / timeDiff).coerceAtLeast(0)
-                    val txSpeed = (txDiff * 1000 / timeDiff).coerceAtLeast(0)
+                    val timeDiff = currentTime - lastUpdateTime
+                    if (timeDiff > 0) {
+                        val rxDiff = currentRx - lastRxBytes
+                        val txDiff = currentTx - lastTxBytes
+                        
+                        // Handle counter reset (e.g., after device reboot)
+                        val rxDiffSafe = if (rxDiff >= 0) rxDiff else currentRx
+                        val txDiffSafe = if (txDiff >= 0) txDiff else currentTx
+                        
+                        val rxSpeed = (rxDiffSafe * 1000 / timeDiff).coerceAtLeast(0)
+                        val txSpeed = (txDiffSafe * 1000 / timeDiff).coerceAtLeast(0)
+                        
+                        currentRxSpeed.set(rxSpeed)
+                        currentTxSpeed.set(txSpeed)
+                        
+                        totalRx.addAndGet(rxDiffSafe.coerceAtLeast(0))
+                        totalTx.addAndGet(txDiffSafe.coerceAtLeast(0))
+                        
+                        notifyListeners()
+                    }
                     
-                    currentRxSpeed.set(rxSpeed)
-                    currentTxSpeed.set(txSpeed)
-                    
-                    totalRx.addAndGet(rxDiff.coerceAtLeast(0))
-                    totalTx.addAndGet(txDiff.coerceAtLeast(0))
-                    
-                    notifyListeners()
+                    lastRxBytes = currentRx
+                    lastTxBytes = currentTx
+                    lastUpdateTime = currentTime
                 }
-                
-                lastRxBytes = currentRx
-                lastTxBytes = currentTx
-                lastUpdateTime = currentTime
                 
             } catch (e: Throwable) {
                 LogManager.e(TAG, "Error updating traffic stats", e)

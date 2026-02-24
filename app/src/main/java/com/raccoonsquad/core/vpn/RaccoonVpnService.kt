@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.TrafficStats as AndroidTrafficStats
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -194,8 +195,15 @@ class RaccoonVpnService : VpnService() {
             
             isActive = true
             
-            // Start traffic tracking
-            TrafficStats.startTracking(applicationInfo.uid)
+            // Start traffic tracking - use total system traffic
+            TrafficStats.startTracking(
+                rxBytesProvider = { 
+                    AndroidTrafficStats.getTotalRxBytes() - AndroidTrafficStats.getMobileRxBytes()
+                },
+                txBytesProvider = { 
+                    AndroidTrafficStats.getTotalTxBytes() - AndroidTrafficStats.getMobileTxBytes()
+                }
+            )
             
             // Add listener to update notification with stats
             TrafficStats.addListener { _, _, _, _ ->
@@ -297,14 +305,14 @@ class RaccoonVpnService : VpnService() {
         return androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("🦝 $nodeName")
             .setContentText("VPN активен • Нажмите для открытия")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
             .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
             .addAction(
-                R.drawable.ic_launcher_foreground,
+                android.R.drawable.ic_menu_close_clear_cancel,
                 "Отключить",
                 disconnectPendingIntent
             )
@@ -313,14 +321,24 @@ class RaccoonVpnService : VpnService() {
     
     fun updateNotificationWithStats(downloadSpeed: String, uploadSpeed: String, totalDownload: String, totalUpload: String) {
         try {
+            val intent = Intent(this, RaccoonVpnService::class.java).apply {
+                action = ACTION_DISCONNECT
+            }
+            val disconnectPendingIntent = PendingIntent.getService(this, 1, intent, PendingIntent.FLAG_IMMUTABLE)
+            
             val notification = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("🦝 ${currentConfig?.name ?: "VPN"}")
                 .setContentText("↓ $downloadSpeed  ↑ $uploadSpeed")
                 .setSubText("Всего: ↓$totalDownload ↑$totalUpload")
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(android.R.drawable.ic_lock_lock)
                 .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
                 .setOngoing(true)
                 .setSilent(true)
+                .addAction(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    "Отключить",
+                    disconnectPendingIntent
+                )
                 .build()
             
             val nm = getSystemService(NotificationManager::class.java)
