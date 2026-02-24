@@ -128,9 +128,28 @@ object XrayWrapper {
             put("queryStrategy", "UseIPv4")
         })
         
-        // Inbounds - SOCKS5 and HTTP proxy
+        // Inbounds - TUN (dokodemo-door), SOCKS5 and HTTP proxy
         val inbounds = JSONArray()
         
+        // CRITICAL: dokodemo-door for TUN traffic
+        // This is what receives traffic from Android VPN TUN interface
+        // libv2ray handles TUN fd internally, but we need this inbound
+        // with followRedirect to accept the redirected traffic
+        inbounds.put(JSONObject().apply {
+            put("tag", "tun-in")
+            put("protocol", "dokodemo-door")
+            put("settings", JSONObject().apply {
+                put("network", "tcp,udp")
+                put("followRedirect", true)  // Accept redirected traffic from TUN
+            })
+            put("sniffing", JSONObject().apply {
+                put("enabled", true)
+                put("destOverride", JSONArray().put("http").put("tls").put("quic"))
+                put("routeOnly", false)
+            })
+        })
+        
+        // Optional: SOCKS5 proxy on localhost
         inbounds.put(JSONObject().apply {
             put("tag", "socks-in")
             put("port", 10808)
@@ -142,6 +161,7 @@ object XrayWrapper {
             })
         })
         
+        // Optional: HTTP proxy on localhost
         inbounds.put(JSONObject().apply {
             put("tag", "http-in")
             put("port", 10809)
