@@ -400,7 +400,6 @@ fun HomeScreen(
     // Test Dialog
     if (showTestDialog) {
         val bruteForceState by viewModel.bruteForceState.collectAsState()
-        val activeConfig = nodes.value.find { it.id == activeId }
         
         TestDialog(
             isAutoTesting = isAutoTesting,
@@ -423,6 +422,8 @@ fun HomeScreen(
                 showTestDialog = false  // Auto-close
             },
             onBruteForce = {
+                // Get active config at callback time
+                val activeConfig = nodes.value.find { it.id == activeId }
                 activeConfig?.let { config ->
                     viewModel.bruteForceCosmetics(config) { updatedConfig ->
                         // Reconnect VPN with new config
