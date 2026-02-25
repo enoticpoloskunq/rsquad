@@ -400,7 +400,7 @@ fun HomeScreen(
     // Test Dialog
     if (showTestDialog) {
         val bruteForceState by viewModel.bruteForceState.collectAsState()
-        val activeConfig by remember { derivedStateOf { nodes.value.find { it.id == activeId } } }
+        val activeConfig = nodes.value.find { it.id == activeId }
         
         TestDialog(
             isAutoTesting = isAutoTesting,
