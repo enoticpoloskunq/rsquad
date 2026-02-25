@@ -201,7 +201,7 @@ object UriParser {
         decodedText.lines()
             .map { it.trim() }
             .filter { it.startsWith("vless://") }
-            .forEachNotNull { line ->
+            .forEach { line ->
                 parse(line)?.let { configs.add(it) }
             }
         
@@ -263,9 +263,4 @@ object UriParser {
         
         return "vless://${config.uuid}@${config.serverAddress}:${config.port}$query$fragment"
     }
-}
-
-// Helper extension
-inline fun <T, R : Any> Iterable<T>.forEachNotNull(action: (T) -> R?) {
-    for (element in this) action(element)
 }
