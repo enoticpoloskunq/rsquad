@@ -119,35 +119,29 @@ fun HomeScreen(
     // Use all nodes directly - Compose handles large lists efficiently with LazyColumn
     val visibleNodeCount = nodes.size
     
-    // Create UI states - use derivedStateOf to prevent unnecessary recompositions
-    // Note: latency is stored directly in VlessConfig, not in separate testResults map
-    // IMPORTANT: nodes, visibleNodeCount, activeId, sortOrder must be keys for recomposition!
-    val uiStates by remember(nodes, visibleNodeCount, activeId, sortOrder) {
-        derivedStateOf {
-            val list = nodes.take(visibleNodeCount).mapIndexed { index, config -> 
-                NodeUiState(
-                    id = config.id,
-                    index = index,
-                    name = config.getDisplayName(),
-                    server = "${config.serverAddress}:${config.port}",
-                    cosmetics = config.getCosmeticsInfo(),
-                    latency = config.latency,  // Use latency directly from config
-                    isActive = config.id == activeId,
-                    hasFragment = config.fragmentationEnabled,
-                    hasNoise = config.noiseEnabled,
-                    mtu = config.mtu,
-                    isFavorite = config.isFavorite,
-                    config = config
-                )
-            }
-            
-            when (sortOrder) {
-                SortOrder.FAVORITES_FIRST -> list.sortedByDescending { it.isFavorite }
-                SortOrder.NAME_ASC -> list.sortedBy { it.name.lowercase() }
-                SortOrder.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
-                SortOrder.PING_ASC -> list.sortedBy { it.latency ?: Long.MAX_VALUE }
-                SortOrder.PING_DESC -> list.sortedByDescending { it.latency ?: Long.MIN_VALUE }
-            }
+    // Create UI states - simple mapping without derivedStateOf to ensure updates
+    val uiStates = nodes.take(visibleNodeCount).mapIndexed { index, config -> 
+        NodeUiState(
+            id = config.id,
+            index = index,
+            name = config.getDisplayName(),
+            server = "${config.serverAddress}:${config.port}",
+            cosmetics = config.getCosmeticsInfo(),
+            latency = config.latency,  // Use latency directly from config
+            isActive = config.id == activeId,
+            hasFragment = config.fragmentationEnabled,
+            hasNoise = config.noiseEnabled,
+            mtu = config.mtu,
+            isFavorite = config.isFavorite,
+            config = config
+        )
+    }.let { list ->
+        when (sortOrder) {
+            SortOrder.FAVORITES_FIRST -> list.sortedByDescending { it.isFavorite }
+            SortOrder.NAME_ASC -> list.sortedBy { it.name.lowercase() }
+            SortOrder.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
+            SortOrder.PING_ASC -> list.sortedBy { it.latency ?: Long.MAX_VALUE }
+            SortOrder.PING_DESC -> list.sortedByDescending { it.latency ?: Long.MIN_VALUE }
         }
     }
     
