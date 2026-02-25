@@ -103,15 +103,30 @@ fun HomeScreen(
     
     // Warm-up state - show loading briefly while Compose initializes
     var isListReady by remember { mutableStateOf(false) }
+    var visibleNodeCount by remember { mutableStateOf(0) }
     
-    // Warm up the list when nodes are first loaded
+    // Warm up the list with progressive loading
     LaunchedEffect(nodes.size) {
         if (nodes.isNotEmpty() && !isListReady) {
-            // Small delay to let Compose warm up the LazyColumn
-            kotlinx.coroutines.delay(300)
+            // Longer warm-up for large lists
+            val warmupTime = if (nodes.size > 100) 500L else 300L
+            kotlinx.coroutines.delay(warmupTime)
+            
+            // Progressive load: start with first 50, then add more smoothly
+            val batchSize = 50
+            visibleNodeCount = minOf(batchSize, nodes.size)
             isListReady = true
+            
+            // Load rest in batches with small delays (invisible to user)
+            if (nodes.size > batchSize) {
+                while (visibleNodeCount < nodes.size) {
+                    kotlinx.coroutines.delay(50) // tiny delay between batches
+                    visibleNodeCount = minOf(visibleNodeCount + batchSize, nodes.size)
+                }
+            }
         } else if (nodes.isEmpty()) {
             isListReady = true
+            visibleNodeCount = 0
         }
     }
     
@@ -119,7 +134,7 @@ fun HomeScreen(
     // Note: latency is stored directly in VlessConfig, not in separate testResults map
     val uiStates by remember {
         derivedStateOf {
-            val list = nodes.mapIndexed { index, config -> 
+            val list = nodes.take(visibleNodeCount).mapIndexed { index, config -> 
                 NodeUiState(
                     id = config.id,
                     index = index,
@@ -338,7 +353,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "🦝 ${uiStates.size}",
+                        "🦝 ${nodes.size}",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
