@@ -1,7 +1,6 @@
 plugins {
+    // AGP 9.0 has built-in Kotlin support
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -52,10 +51,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-    
     buildFeatures {
         compose = true
         buildConfig = true
@@ -77,13 +72,13 @@ dependencies {
     // Core
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.activity:activity-compose:1.10.0")
     
     // Splash Screen API
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.core:core-splashscreen:1.2.0")
     
-    // Compose BOM 2025.02.00 - fixes animation core compatibility
-    implementation(platform("androidx.compose:compose-bom:2025.02.00"))
+    // Compose BOM 2026.02.00
+    implementation(platform("androidx.compose:compose-bom:2026.02.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -93,19 +88,19 @@ dependencies {
     implementation("androidx.compose.animation:animation-core")
     
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation("androidx.navigation:navigation-compose:2.8.6")
     
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     
     // DataStore (for saving nodes)
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.datastore:datastore-preferences:1.1.2")
     
     // OkHttp (for network)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     
     // JSON
-    implementation("com.google.code.gson:gson:2.11.0")
+    implementation("com.google.code.gson:gson:2.12.1")
     
     // VPN Service
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
@@ -117,7 +112,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2025.02.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.02.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
