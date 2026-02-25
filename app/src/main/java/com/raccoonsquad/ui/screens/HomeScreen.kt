@@ -103,12 +103,6 @@ fun HomeScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var showCosmeticDialog by remember { mutableStateOf(false) }
     var showDoctorDialog by remember { mutableStateOf(false) }
-    var showRatingDialog by remember { mutableStateOf(false) }
-
-    // Smart Rating
-    val settingsManager = remember { SettingsManager(context) }
-    val successfulConnections by settingsManager.successfulConnections.collectAsState(initial = 0)
-    val ratingShown by settingsManager.ratingShown.collectAsState(initial = false)
     
     var sortOrder by remember { mutableStateOf(SortOrder.FAVORITES_FIRST) }
     
@@ -125,25 +119,7 @@ fun HomeScreen(
             hasLoadedNodes = true
         }
     }
-
-    // Smart Rating: Show dialog when threshold reached
-    LaunchedEffect(successfulConnections, ratingShown) {
-        if (successfulConnections >= SettingsManager.RATING_THRESHOLD && !ratingShown) {
-            showRatingDialog = true
-        }
-    }
-
-    // Track successful VPN connection for Smart Rating
-    LaunchedEffect(isVpnActive) {
-        if (isVpnActive) {
-            // Small delay to ensure connection is stable
-            kotlinx.coroutines.delay(3000)
-            if (activeId != null) {
-                settingsManager.incrementSuccessfulConnections()
-            }
-        }
-    }
-
+    
     // Use all nodes directly - Compose handles large lists efficiently with LazyColumn
     val visibleNodeCount = nodes.size
     
@@ -509,23 +485,6 @@ fun HomeScreen(
             activeConfig = activeNode?.config,
             isVpnActive = isVpnActive,
             onDismiss = { showDoctorDialog = false }
-        )
-    }
-
-    // Rating Dialog (Smart Rating)
-    if (showRatingDialog) {
-        RatingDialog(
-            onRate = {
-                // Open Play Store (would need actual implementation)
-                showRatingDialog = false
-            },
-            onLater = {
-                showRatingDialog = false
-                // Reset counter so user gets asked again later
-            },
-            onNever = {
-                showRatingDialog = false
-            }
         )
     }
 }
@@ -1250,47 +1209,6 @@ fun DoctorDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("OK")
-            }
-        }
-    )
-}
-
-@Composable
-fun RatingDialog(
-    onRate: () -> Unit,
-    onLater: () -> Unit,
-    onNever: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onLater,
-        icon = { Text("⭐", style = MaterialTheme.typography.headlineMedium) },
-        title = { Text("Нравится приложение?") },
-        text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("🦝 Raccoon Squad")
-                Text(
-                    "Если вам нравится приложение, будем благодарны за оценку в Play Store!",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onRate) {
-                Text("⭐ Оценить")
-            }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = onLater) {
-                    Text("Позже")
-                }
-                TextButton(onClick = onNever) {
-                    Text("Нет")
-                }
             }
         }
     )
