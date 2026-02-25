@@ -132,7 +132,8 @@ fun HomeScreen(
     
     // Create UI states - use derivedStateOf to prevent unnecessary recompositions
     // Note: latency is stored directly in VlessConfig, not in separate testResults map
-    val uiStates by remember {
+    // IMPORTANT: nodes, visibleNodeCount, activeId, sortOrder must be keys for recomposition!
+    val uiStates by remember(nodes, visibleNodeCount, activeId, sortOrder) {
         derivedStateOf {
             val list = nodes.take(visibleNodeCount).mapIndexed { index, config -> 
                 NodeUiState(
