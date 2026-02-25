@@ -1,6 +1,7 @@
 package com.raccoonsquad.data.repository
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -8,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.raccoonsquad.data.model.*
 import com.raccoonsquad.data.parser.UriParser
+import com.raccoonsquad.core.log.LogManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
@@ -23,6 +25,8 @@ class NodeRepository(private val context: Context) {
     private var cachedNodes: List<VlessConfig> = emptyList()
     
     companion object {
+        private const val TAG = "NodeRepository"
+        
         @Volatile
         private var instance: NodeRepository? = null
         
@@ -35,8 +39,10 @@ class NodeRepository(private val context: Context) {
     
     val nodes: Flow<List<VlessConfig>> = context.dataStore.data.map { prefs ->
         val nodesJson = prefs[nodesKey] ?: "[]"
+        LogManager.d(TAG, "Flow: reading nodes, JSON length=${nodesJson.length}")
         val parsed = parseNodesFromJson(nodesJson)
         cachedNodes = parsed
+        LogManager.i(TAG, "Flow: emitting ${parsed.size} nodes")
         parsed
     }
     
@@ -66,19 +72,35 @@ class NodeRepository(private val context: Context) {
     }
     
     suspend fun addNodes(configs: List<VlessConfig>) {
-        android.util.Log.d("NodeRepository", "addNodes: adding ${configs.size} nodes")
-        context.dataStore.edit { prefs ->
-            val currentNodes = prefs[nodesKey] ?: "[]"
-            val jsonArray = JSONArray(currentNodes)
-            val initialCount = jsonArray.length()
-            
-            // Add all nodes (no deduplication - user wants all)
-            configs.forEach { config ->
-                jsonArray.put(configToJson(config))
+        LogManager.i(TAG, "=== addNodes() START: adding ${configs.size} nodes ===")
+        
+        try {
+            context.dataStore.edit { prefs ->
+                val currentNodes = prefs[nodesKey] ?: "[]"
+                LogManager.d(TAG, "Current nodes JSON length: ${currentNodes.length}")
+                
+                val jsonArray = JSONArray(currentNodes)
+                val initialCount = jsonArray.length()
+                LogManager.d(TAG, "Initial count: $initialCount")
+                
+                // Add all nodes
+                var addedCount = 0
+                configs.forEach { config ->
+                    try {
+                        val json = configToJson(config)
+                        jsonArray.put(json)
+                        addedCount++
+                    } catch (e: Exception) {
+                        LogManager.e(TAG, "Failed to serialize config: ${config.name}", e)
+                    }
+                }
+                
+                prefs[nodesKey] = jsonArray.toString()
+                LogManager.i(TAG, "=== addNodes() SUCCESS: $initialCount -> ${jsonArray.length()} nodes ($addedCount added) ===")
             }
-            
-            prefs[nodesKey] = jsonArray.toString()
-            android.util.Log.i("NodeRepository", "addNodes: $initialCount -> ${jsonArray.length()} nodes saved")
+        } catch (e: Exception) {
+            LogManager.e(TAG, "=== addNodes() FAILED ===", e)
+            throw e
         }
     }
     
