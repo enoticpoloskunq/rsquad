@@ -93,6 +93,7 @@ fun HomeScreen(
     val isImporting by viewModel.isImporting.collectAsState()
     val testingUuids by viewModel.testingUuids.collectAsState()
     val isAutoTesting by viewModel.isAutoTesting.collectAsState()
+    val testProgress by viewModel.testProgress.collectAsState()
     
     var showImportDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
@@ -396,7 +397,11 @@ fun HomeScreen(
         TestDialog(
             isAutoTesting = isAutoTesting,
             isVpnActive = isVpnActive,
-            onTestAllTcp = { viewModel.testAllNodes(NodeTester.TestMethod.TCP) },
+            testProgress = testProgress,
+            onTestAllTcp = {
+                viewModel.testAllNodes(NodeTester.TestMethod.TCP)
+                showTestDialog = false  // Auto-close
+            },
             onTestUrl = {
                 // URL test through active VPN - measures real latency
                 GlobalScope.launch(Dispatchers.IO) {
@@ -409,9 +414,23 @@ fun HomeScreen(
                         }
                     }
                 }
+                showTestDialog = false  // Auto-close
             },
-            onTestAllThroughVpn = { viewModel.testAllNodesThroughVpn() },
-            onAutoCleanTcp = { viewModel.autoTestAndClean(NodeTester.TestMethod.TCP) },
+            onTestAllUrl = {
+                viewModel.testAllNodesWithUrl()
+                showTestDialog = false  // Auto-close
+            },
+            onTestAllThroughVpn = {
+                viewModel.testAllNodesThroughVpn()
+                showTestDialog = false  // Auto-close
+            },
+            onCancelTest = {
+                viewModel.cancelTest()
+            },
+            onAutoCleanTcp = {
+                viewModel.autoTestAndClean(NodeTester.TestMethod.TCP)
+                showTestDialog = false  // Auto-close
+            },
             onDismiss = { showTestDialog = false }
         )
     }
@@ -752,17 +771,59 @@ fun ImportDialog(
 fun TestDialog(
     isAutoTesting: Boolean,
     isVpnActive: Boolean = false,
+    testProgress: Pair<Int, Int> = 0 to 0,  // tested / total
     onTestAllTcp: () -> Unit,
     onTestUrl: () -> Unit = {},
+    onTestAllUrl: () -> Unit = {},  // Test all nodes with URL (no VPN needed)
     onTestAllThroughVpn: () -> Unit = {},  // Test all nodes through VPN
+    onCancelTest: () -> Unit = {},  // Cancel current test
     onAutoCleanTcp: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val (tested, total) = testProgress
+    val isTesting = isAutoTesting || total > 0
+    
     AlertDialog(
-        onDismissRequest = if (isAutoTesting) { {} } else onDismiss,
+        onDismissRequest = if (isTesting) { {} } else onDismiss,
         title = { Text("Тестирование") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Progress indicator
+                if (isTesting) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "Тестирование: $tested / $total",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { if (total > 0) tested.toFloat() / total else 0f },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = onCancelTest,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("❌ Отменить")
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                
                 // TCP Ping section
                 Text("Быстрая проверка (TCP Ping):", style = MaterialTheme.typography.labelMedium)
                 Text(
@@ -773,7 +834,7 @@ fun TestDialog(
                 
                 Button(
                     onClick = onTestAllTcp,
-                    enabled = !isAutoTesting,
+                    enabled = !isTesting,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("🔍 TCP Ping всех нод")
@@ -781,21 +842,33 @@ fun TestDialog(
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
-                // URL Test section - only when VPN is active
-                if (isVpnActive) {
-                    Text("Реальная проверка:", style = MaterialTheme.typography.labelMedium)
-                    Text(
-                        "Проверяет через активный VPN туннель",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+                // URL Test section
+                Text("Реальная проверка:", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    "Проверяет подключение к серверу",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                Button(
+                    onClick = onTestAllUrl,
+                    enabled = !isTesting,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary
                     )
-                    
+                ) {
+                    Text("🌐 URL тест всех нод")
+                }
+                
+                // Additional VPN tests (only when VPN is active)
+                if (isVpnActive) {
                     Button(
                         onClick = onTestUrl,
-                        enabled = !isAutoTesting,
+                        enabled = !isTesting,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondary
+                            containerColor = MaterialTheme.colorScheme.tertiary
                         )
                     ) {
                         Text("🌐 URL тест текущей ноды")
@@ -803,17 +876,17 @@ fun TestDialog(
                     
                     Button(
                         onClick = onTestAllThroughVpn,
-                        enabled = !isAutoTesting,
+                        enabled = !isTesting,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiary
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
                     ) {
-                        Text("🔄 Тест ВСЕХ нод через VPN")
+                        Text("🔄 Тест ВСЕХ через активный VPN")
                     }
-                    
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
                 }
+                
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
                 // Auto-clean section
                 Text("Умная очистка:", style = MaterialTheme.typography.labelMedium)
@@ -825,7 +898,7 @@ fun TestDialog(
                 
                 Button(
                     onClick = onAutoCleanTcp,
-                    enabled = !isAutoTesting,
+                    enabled = !isTesting,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
@@ -833,30 +906,10 @@ fun TestDialog(
                 ) {
                     Text("🗑️ Удалить недоступные")
                 }
-                
-                if (isAutoTesting) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text("Тестирование...", style = MaterialTheme.typography.bodySmall)
-                }
-                
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                Text(
-                    if (isVpnActive) 
-                        "✅ VPN активен - можно проверить через туннель"
-                    else 
-                        "⚠️ TCP Ping не гарантирует работу VPN!\nПодключитесь для реальной проверки",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isVpnActive) 
-                        MaterialTheme.colorScheme.primary 
-                    else 
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss, enabled = !isAutoTesting) {
+            TextButton(onClick = onDismiss, enabled = !isTesting) {
                 Text("Готово")
             }
         }

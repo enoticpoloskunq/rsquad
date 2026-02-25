@@ -144,6 +144,33 @@ object NodeTester {
     }
     
     /**
+     * Test node URL without active VPN - creates temporary connection
+     * Simple TCP-based test that doesn't require VPN service
+     */
+    fun testNodeUrl(config: VlessConfig): TestResult {
+        return try {
+            val startTime = System.currentTimeMillis()
+            
+            // Simple test: TCP connect + TLS handshake simulation
+            // For VLESS/Reality, we test if we can reach the server
+            Socket().use { socket ->
+                socket.soTimeout = 8000
+                socket.connect(InetSocketAddress(config.serverAddress, config.port), 8000)
+                
+                // For Reality, check if TLS handshake would work
+                // We just measure the connection time for now
+                val latency = System.currentTimeMillis() - startTime
+                
+                LogManager.d(TAG, "URL test ${config.name}: ✓ ${latency}ms")
+                TestResult(success = true, latencyMs = latency, isWorking = true)
+            }
+        } catch (e: Exception) {
+            LogManager.w(TAG, "URL test ${config.name} FAILED: ${e.message}")
+            TestResult(success = false, error = e.message)
+        }
+    }
+    
+    /**
      * Test real VPN connectivity - connect through VPN and make HTTP request
      */
     private fun testUrlThroughVpn(config: VlessConfig, vpnService: VpnService): TestResult {

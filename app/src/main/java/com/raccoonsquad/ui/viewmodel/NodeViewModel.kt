@@ -64,6 +64,21 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _isAutoTesting = MutableStateFlow(false)
     val isAutoTesting: StateFlow<Boolean> = _isAutoTesting.asStateFlow()
     
+    // Progress tracking
+    private val _testProgress = MutableStateFlow<Pair<Int, Int>>(0 to 0)  // tested / total
+    val testProgress: StateFlow<Pair<Int, Int>> = _testProgress.asStateFlow()
+    
+    // Test job for cancellation
+    private var testJob: kotlinx.coroutines.Job? = null
+    
+    fun cancelTest() {
+        testJob?.cancel()
+        testJob = null
+        _isAutoTesting.value = false
+        _testingIds.value = emptySet()
+        _testProgress.value = 0 to 0
+    }
+    
     /**
      * Import nodes from text (clipboard/manual)
      */
@@ -175,17 +190,31 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
      * Test all nodes - updates latency directly in configs, batch update at end
      */
     fun testAllNodes(method: NodeTester.TestMethod = NodeTester.TestMethod.TCP) {
-        viewModelScope.launch {
+        testJob?.cancel()  // Cancel any existing test
+        testJob = viewModelScope.launch {
             val allNodes = nodes.value
+            val total = allNodes.size
             _testingIds.value = allNodes.map { it.id }.toSet()
+            _isAutoTesting.value = true
+            _testProgress.value = 0 to total
             
             val updatedConfigs = mutableListOf<VlessConfig>()
+            var tested = 0
             
             allNodes.forEach { config ->
+                // Check if cancelled
+                if (!isActive) {
+                    LogManager.i("ViewModel", "Test cancelled by user")
+                    return@forEach
+                }
+                
                 val result = NodeTester.testNode(config.serverAddress, config.port, method)
                 val updatedConfig = config.copy(latency = if (result.success) result.latencyMs else -1L)
                 updatedConfigs.add(updatedConfig)
-                // Update testing IDs to show progress
+                
+                // Update progress
+                tested++
+                _testProgress.value = tested to total
                 _testingIds.value = _testingIds.value - config.id
             }
             
@@ -195,31 +224,44 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             _testingIds.value = emptySet()
+            _isAutoTesting.value = false
+            _testProgress.value = 0 to 0
+            testJob = null
         }
     }
     
     /**
-     * Test all nodes through active VPN connection
-     * This tests real connectivity by switching to each node and testing
+     * Test all nodes with URL test (connects to each node individually)
      */
-    fun testAllNodesThroughVpn() {
-        viewModelScope.launch {
+    fun testAllNodesWithUrl() {
+        testJob?.cancel()
+        testJob = viewModelScope.launch {
             val allNodes = nodes.value
+            val total = allNodes.size
             _isAutoTesting.value = true
+            _testProgress.value = 0 to total
             
             val updatedConfigs = mutableListOf<VlessConfig>()
+            var tested = 0
             
-            allNodes.forEachIndexed { index, config ->
-                // Switch to this node
-                setActiveNode(config.id)
+            allNodes.forEach { config ->
+                // Check if cancelled
+                if (!isActive) {
+                    LogManager.i("ViewModel", "URL test cancelled by user")
+                    return@forEach
+                }
                 
-                // Wait for connection (handled by VPN service)
-                kotlinx.coroutines.delay(2000)
-                
-                // Test through the active proxy
-                val result = NodeTester.testThroughActiveProxy()
-                val updatedConfig = config.copy(latency = if (result.success) result.latencyMs else -1L)
+                // For each node, create a test connection
+                val result = NodeTester.testNodeUrl(config)
+                val updatedConfig = config.copy(
+                    latency = if (result.success) result.latencyMs else -1L,
+                    lastUrlLatency = if (result.success) result.latencyMs else null,
+                    lastTestTime = System.currentTimeMillis()
+                )
                 updatedConfigs.add(updatedConfig)
+                
+                tested++
+                _testProgress.value = tested to total
             }
             
             // Batch update
@@ -228,6 +270,60 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             _isAutoTesting.value = false
+            _testProgress.value = 0 to 0
+            testJob = null
+        }
+    }
+    
+    /**
+     * Test all nodes through active VPN connection
+     * This tests real connectivity by switching to each node and testing
+     */
+    fun testAllNodesThroughVpn() {
+        testJob?.cancel()
+        testJob = viewModelScope.launch {
+            val allNodes = nodes.value
+            val total = allNodes.size
+            _isAutoTesting.value = true
+            _testProgress.value = 0 to total
+            
+            val updatedConfigs = mutableListOf<VlessConfig>()
+            var tested = 0
+            
+            allNodes.forEach { config ->
+                // Check if cancelled
+                if (!isActive) {
+                    LogManager.i("ViewModel", "VPN test cancelled by user")
+                    return@forEach
+                }
+                
+                // Switch to this node
+                setActiveNode(config.id)
+                
+                // Wait for connection (handled by VPN service)
+                kotlinx.coroutines.delay(2000)
+                
+                // Test through the active proxy
+                val result = NodeTester.testThroughActiveProxy()
+                val updatedConfig = config.copy(
+                    latency = if (result.success) result.latencyMs else -1L,
+                    lastUrlLatency = if (result.success) result.latencyMs else null,
+                    lastTestTime = System.currentTimeMillis()
+                )
+                updatedConfigs.add(updatedConfig)
+                
+                tested++
+                _testProgress.value = tested to total
+            }
+            
+            // Batch update
+            withContext(Dispatchers.IO) {
+                repository.updateAllNodes(updatedConfigs)
+            }
+            
+            _isAutoTesting.value = false
+            _testProgress.value = 0 to 0
+            testJob = null
         }
     }
     
@@ -235,17 +331,31 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
      * Auto-test and remove failed nodes
      */
     fun autoTestAndClean(method: NodeTester.TestMethod = NodeTester.TestMethod.TCP) {
-        viewModelScope.launch {
+        testJob?.cancel()
+        testJob = viewModelScope.launch {
             _isAutoTesting.value = true
             
             val allNodes = nodes.value
+            val total = allNodes.size
+            _testProgress.value = 0 to total
+            
             val failedIds = mutableListOf<String>()
+            var tested = 0
             
             allNodes.forEach { config ->
+                // Check if cancelled
+                if (!isActive) {
+                    LogManager.i("ViewModel", "Auto-clean cancelled by user")
+                    return@forEach
+                }
+                
                 val result = NodeTester.testNode(config.serverAddress, config.port, method)
                 if (!result.success) {
                     failedIds.add(config.id)
                 }
+                
+                tested++
+                _testProgress.value = tested to total
             }
             
             // Remove failed nodes
