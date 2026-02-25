@@ -427,6 +427,44 @@ object XrayWrapper {
     }
     
     fun isRunning(): Boolean = isRunning
+
+    /**
+     * Measure delay for a config WITHOUT starting VPN
+     * This is the REAL test - starts Xray temporarily and measures HTTP request time
+     * Uses Libv2ray.measureOutboundDelay() internally
+     * 
+     * @param configJson Xray config JSON
+     * @param url Test URL (default: https://www.google.com/generate_204)
+     * @return Delay in milliseconds, or -1 on error
+     */
+    fun measureDelay(configJson: String, url: String = "https://www.google.com/generate_204"): Long {
+        return try {
+            LogManager.d(TAG, "measureDelay() starting...")
+            val startTime = System.currentTimeMillis()
+            
+            // Use libv2ray's built-in delay measurement
+            // This starts a temporary Xray instance and measures the delay
+            val delay = Libv2ray.measureOutboundDelay(configJson, url)
+            
+            val elapsed = System.currentTimeMillis() - startTime
+            LogManager.d(TAG, "measureDelay() result: ${delay}ms, total time: ${elapsed}ms")
+            
+            delay
+            
+        } catch (e: Throwable) {
+            LogManager.e(TAG, "measureDelay() failed: ${e.message}")
+            -1L
+        }
+    }
+
+    /**
+     * Test a VlessConfig by measuring delay
+     * Generates config JSON internally
+     */
+    fun testConfig(config: VlessConfig, url: String = "https://www.google.com/generate_204"): Long {
+        val configJson = generateConfig(config)
+        return measureDelay(configJson, url)
+    }
 }
 
 /**

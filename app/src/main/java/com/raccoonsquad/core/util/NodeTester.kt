@@ -145,7 +145,7 @@ object NodeTester {
     
     /**
      * Test node URL without active VPN - creates temporary connection
-     * Simple TCP-based test that doesn't require VPN service
+     * REAL test using libv2ray MeasureOutboundDelay - starts Xray temporarily
      */
     suspend fun testNodeUrl(config: VlessConfig): TestResult = withContext(Dispatchers.IO) {
         // Validate config first
@@ -161,15 +161,18 @@ object NodeTester {
         return@withContext try {
             val startTime = System.currentTimeMillis()
             
-            // Simple test: TCP connect - for VLESS/Reality this checks server reachability
-            Socket().use { socket ->
-                socket.soTimeout = 8000
-                socket.connect(InetSocketAddress(config.serverAddress, config.port), 8000)
-                
-                val latency = System.currentTimeMillis() - startTime
-                
-                LogManager.d(TAG, "URL test ${config.name}: ✓ ${latency}ms")
-                TestResult(success = true, latencyMs = latency, isWorking = true)
+            // REAL TEST: Use XrayWrapper.testConfig() which calls libv2ray MeasureOutboundDelay
+            // This actually starts Xray and makes an HTTP request through the tunnel
+            val delay = XrayWrapper.testConfig(config)
+            
+            val elapsed = System.currentTimeMillis() - startTime
+            
+            if (delay > 0) {
+                LogManager.d(TAG, "URL test ${config.name}: ✓ ${delay}ms (total: ${elapsed}ms)")
+                TestResult(success = true, latencyMs = delay, isWorking = true)
+            } else {
+                LogManager.w(TAG, "URL test ${config.name} FAILED: Xray returned -1")
+                TestResult(success = false, error = "Connection failed")
             }
         } catch (e: Exception) {
             val errorMsg = e.message ?: e.javaClass.simpleName
