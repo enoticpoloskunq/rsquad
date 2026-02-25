@@ -250,24 +250,100 @@ object XrayWrapper {
         
         json.put("outbounds", outbounds)
         
-        // Routing - with default route to proxy
+        // Routing - Russian services DIRECT, others through proxy
         json.put("routing", JSONObject().apply {
             put("domainStrategy", "IPIfNonMatch")
             put("rules", JSONArray().apply {
                 // Private IPs -> direct (for local network access)
-                // Must be BEFORE default route!
                 put(JSONObject().apply {
                     put("type", "field")
                     put("ip", JSONArray().put("geoip:private"))
                     put("outboundTag", "direct")
                 })
+                
+                // Russian IPs -> direct (banks, gov, etc)
+                put(JSONObject().apply {
+                    put("type", "field")
+                    put("ip", JSONArray().put("geoip:ru"))
+                    put("outboundTag", "direct")
+                })
+                
+                // Russian domains -> direct
+                put(JSONObject().apply {
+                    put("type", "field")
+                    put("domain", JSONArray().apply {
+                        put("geosite:category-ru")
+                        put("geosite:yandex")
+                        put("geosite:vk")
+                        put("geosite:mailru")
+                        put("geosite:github")
+                    })
+                    put("outboundTag", "direct")
+                })
+                
+                // Popular Russian services - direct (explicit list)
+                put(JSONObject().apply {
+                    put("type", "field")
+                    put("domain", JSONArray().apply {
+                        // Government
+                        put("gosuslugi.ru")
+                        put("www.gosuslugi.ru")
+                        put("esia.gosuslugi.ru")
+                        put("gu-st.ru")
+                        put("nalog.gov.ru")
+                        put("goszakupki.ru")
+                        put("zakupki.gov.ru")
+                        // Banks
+                        put("sberbank.ru")
+                        put("online.sberbank.ru")
+                        put("tinkoff.ru")
+                        put("tbank.ru")
+                        put("vtb.ru")
+                        put("alfabank.ru")
+                        put("raiffeisen.ru")
+                        put("gazprombank.ru")
+                        put("rosbank.ru")
+                        // Social
+                        put("vk.com")
+                        put("vkontakte.ru")
+                        put("ok.ru")
+                        put("odnoklassniki.ru")
+                        put("telegram.org")
+                        put("t.me")
+                        // Services
+                        put("yandex.ru")
+                        put("ya.ru")
+                        put("mail.ru")
+                        put("rambler.ru")
+                        put("kinopoisk.ru")
+                        put("avito.ru")
+                        put("hh.ru")
+                        put("wildberries.ru")
+                        put("ozon.ru")
+                        put("aliexpress.ru")
+                        put("dns-shop.ru")
+                        put("citilink.ru")
+                        put("mts.ru")
+                        put("beeline.ru")
+                        put("megafon.ru")
+                        put("tele2.ru")
+                        put("rostelecom.ru")
+                        // Education
+                        put("edu.ru")
+                        put("russianpost.ru")
+                        put("pochta.ru")
+                    })
+                    put("outboundTag", "direct")
+                })
+                
                 // Block ads
                 put(JSONObject().apply {
                     put("type", "field")
                     put("domain", JSONArray().put("geosite:category-ads-all"))
                     put("outboundTag", "block")
                 })
-                // DEFAULT: All other traffic -> proxy (includes DNS port 53, 853)
+                
+                // DEFAULT: All other traffic -> proxy
                 put(JSONObject().apply {
                     put("type", "field")
                     put("network", "tcp,udp")
