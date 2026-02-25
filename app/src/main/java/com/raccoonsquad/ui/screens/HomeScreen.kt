@@ -359,26 +359,6 @@ fun HomeScreen(
                     )
                 }
             } else {
-                // Pull-to-refresh
-                var isRefreshing by remember { mutableStateOf(false) }
-                
-                Box(modifier = Modifier.fillMaxSize()) {
-                    androidx.compose.material.pullrefresh.PullRefreshIndicator(
-                        refreshing = isRefreshing,
-                        pullRefreshState = androidx.compose.material.pullrefresh.rememberPullRefreshState(
-                            refreshing = isRefreshing,
-                            onRefresh = {
-                                isRefreshing = true
-                                viewModel.testAllNodes(NodeTester.TestMethod.TCP)
-                                isRefreshing = false
-                            }
-                        ),
-                        modifier = Modifier.align(Alignment.TopCenter),
-                        backgroundColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.primary
-                    )
-                }
-                
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
