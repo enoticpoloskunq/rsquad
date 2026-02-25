@@ -75,3 +75,6 @@ vcs.xml
 # Secrets
 *.env
 secrets.properties
+
+# Keep debug keystore for consistent APK signing (allows updates without reinstall)
+!app/debug.keystore

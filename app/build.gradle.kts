@@ -21,6 +21,16 @@ android {
             useSupportLibrary = true
         }
     }
+    
+    // Persistent debug signing for consistent updates
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "debug"
+            keyPassword = "android"
+        }
+    }
 
     buildTypes {
         debug {
@@ -28,6 +38,7 @@ android {
             isShrinkResources = false
             // Faster debug builds
             isCrunchPngs = false
+            signingConfig = signingConfigs.getByName("debug")
         }
         
         release {
@@ -39,6 +50,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Use debug signing for release too (for easy updates)
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     
