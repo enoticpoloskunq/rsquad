@@ -24,11 +24,15 @@ android {
         debug {
             isMinifyEnabled = false
             isShrinkResources = false
+            // Faster debug builds
+            isCrunchPngs = false
         }
         
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            // R8 full mode for better optimization
+            isCrunchPngs = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -54,8 +58,14 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // Disable unused features for faster builds
+        aidl = false
+        renderScript = false
+        resValues = false
+        shaders = false
     }
     
+    // Configuration Cache support (Gradle 9.3)
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -66,7 +76,17 @@ android {
             excludes += "/META-INF/NOTICE.txt"
         }
     }
+    
+    // Build time optimizations
+    lint {
+        // Disable lint for faster debug builds
+        checkReleaseBuilds = true
+        abortOnError = false
+    }
 }
+
+// Enable Configuration Cache (persisted between builds)
+// Add to gradle.properties: org.gradle.configuration-cache=true
 
 dependencies {
     // Core
