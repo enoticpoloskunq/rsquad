@@ -189,12 +189,45 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                 _testingIds.value = _testingIds.value - config.id
             }
             
-            // Batch update all configs at once
+            // Batch update all configs at once - much more efficient!
             withContext(Dispatchers.IO) {
-                updatedConfigs.forEach { repository.updateNode(it) }
+                repository.updateAllNodes(updatedConfigs)
             }
             
             _testingIds.value = emptySet()
+        }
+    }
+    
+    /**
+     * Test all nodes through active VPN connection
+     * This tests real connectivity by switching to each node and testing
+     */
+    fun testAllNodesThroughVpn() {
+        viewModelScope.launch {
+            val allNodes = nodes.value
+            _isAutoTesting.value = true
+            
+            val updatedConfigs = mutableListOf<VlessConfig>()
+            
+            allNodes.forEachIndexed { index, config ->
+                // Switch to this node
+                setActiveNode(config.id)
+                
+                // Wait for connection (handled by VPN service)
+                kotlinx.coroutines.delay(2000)
+                
+                // Test through the active proxy
+                val result = NodeTester.testThroughActiveProxy()
+                val updatedConfig = config.copy(latency = if (result.success) result.latencyMs else -1L)
+                updatedConfigs.add(updatedConfig)
+            }
+            
+            // Batch update
+            withContext(Dispatchers.IO) {
+                repository.updateAllNodes(updatedConfigs)
+            }
+            
+            _isAutoTesting.value = false
         }
     }
     

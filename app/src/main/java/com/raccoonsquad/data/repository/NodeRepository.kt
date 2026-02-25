@@ -179,6 +179,34 @@ class NodeRepository private constructor(private val context: Context) {
         }
     }
     
+    /**
+     * Update all nodes at once - more efficient than individual updates
+     */
+    suspend fun updateAllNodes(configs: List<VlessConfig>) {
+        context.dataStore.edit { prefs ->
+            // Build a map of id -> config for quick lookup
+            val configMap = configs.associateBy { it.id }
+            
+            val currentNodes = prefs[nodesKey] ?: "[]"
+            val jsonArray = JSONArray(currentNodes)
+            val newArray = JSONArray()
+            
+            for (i in 0 until jsonArray.length()) {
+                val node = jsonArray.getJSONObject(i)
+                val id = node.getString("id")
+                // Use updated config if exists, otherwise keep original
+                val updatedConfig = configMap[id]
+                if (updatedConfig != null) {
+                    newArray.put(configToJson(updatedConfig))
+                } else {
+                    newArray.put(node)
+                }
+            }
+            
+            prefs[nodesKey] = newArray.toString()
+        }
+    }
+    
     suspend fun toggleFavorite(id: String) {
         context.dataStore.edit { prefs ->
             val currentNodes = prefs[nodesKey] ?: "[]"
@@ -248,6 +276,7 @@ class NodeRepository private constructor(private val context: Context) {
             put("tcpKeepAliveInterval", config.tcpKeepAliveInterval)
             put("mtu", config.mtu)
             put("isFavorite", config.isFavorite)
+            put("latency", config.latency ?: JSONObject.NULL)  // Save latency!
         }
     }
     
@@ -276,7 +305,8 @@ class NodeRepository private constructor(private val context: Context) {
             tcpKeepAlive = obj.optBoolean("tcpKeepAlive", true),
             tcpKeepAliveInterval = obj.optInt("tcpKeepAliveInterval", 30),
             mtu = obj.optString("mtu", "default"),
-            isFavorite = obj.optBoolean("isFavorite", false)
+            isFavorite = obj.optBoolean("isFavorite", false),
+            latency = if (obj.isNull("latency")) null else obj.optLong("latency")  // Read latency!
         )
     }
 }

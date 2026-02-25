@@ -416,6 +416,7 @@ fun HomeScreen(
                     }
                 }
             },
+            onTestAllThroughVpn = { viewModel.testAllNodesThroughVpn() },
             onAutoCleanTcp = { viewModel.autoTestAndClean(NodeTester.TestMethod.TCP) },
             onDismiss = { showTestDialog = false }
         )
@@ -759,6 +760,7 @@ fun TestDialog(
     isVpnActive: Boolean = false,
     onTestAllTcp: () -> Unit,
     onTestUrl: () -> Unit = {},
+    onTestAllThroughVpn: () -> Unit = {},  // Test all nodes through VPN
     onAutoCleanTcp: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -802,7 +804,18 @@ fun TestDialog(
                             containerColor = MaterialTheme.colorScheme.secondary
                         )
                     ) {
-                        Text("🌐 URL тест через VPN")
+                        Text("🌐 URL тест текущей ноды")
+                    }
+                    
+                    Button(
+                        onClick = onTestAllThroughVpn,
+                        enabled = !isAutoTesting,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary
+                        )
+                    ) {
+                        Text("🔄 Тест ВСЕХ нод через VPN")
                     }
                     
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
