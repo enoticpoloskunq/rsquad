@@ -3,6 +3,7 @@ package com.raccoonsquad.data.parser
 import android.net.Uri
 import android.util.Base64
 import com.raccoonsquad.data.model.*
+import com.raccoonsquad.core.log.LogManager
 
 /**
  * Parser for VLESS URI format with full cosmetic settings support
@@ -15,13 +16,15 @@ import com.raccoonsquad.data.model.*
  */
 object UriParser {
     
+    private const val TAG = "UriParser"
+    
     /**
      * Parse single VLESS URI
      */
     fun parse(uriString: String): VlessConfig? {
         val trimmed = uriString.trim()
         if (!trimmed.startsWith("vless://")) {
-            android.util.Log.w("UriParser", "parse: not a vless URI")
+            LogManager.w(TAG, "parse: not a vless URI")
             return null
         }
         
@@ -30,13 +33,13 @@ object UriParser {
             
             val uuid = uri.userInfo
             if (uuid.isNullOrEmpty()) {
-                android.util.Log.e("UriParser", "parse: missing UUID")
+                LogManager.e(TAG, "parse: missing UUID")
                 return null
             }
             
             val serverAddress = uri.host
             if (serverAddress.isNullOrEmpty()) {
-                android.util.Log.e("UriParser", "parse: missing host")
+                LogManager.e(TAG, "parse: missing host")
                 return null
             }
             
@@ -182,7 +185,7 @@ object UriParser {
                 mtu = mtu
             )
         } catch (e: Exception) {
-            android.util.Log.e("UriParser", "Failed to parse URI: ${e.message}")
+            LogManager.e(TAG, "Failed to parse URI: ${e.message}")
             null
         }
     }
@@ -192,7 +195,7 @@ object UriParser {
      * Supports: plain URIs, base64 encoded, mixed formats
      */
     fun parseMultiple(text: String): List<VlessConfig> {
-        android.util.Log.d("UriParser", "parseMultiple: input length=${text.length}")
+        LogManager.d(TAG, "parseMultiple: input length=${text.length}")
         
         val configs = mutableListOf<VlessConfig>()
         
@@ -204,29 +207,29 @@ object UriParser {
                 .replace(" ", "")
             
             if (cleanInput.startsWith("vless://") || cleanInput.startsWith("vmess://")) {
-                android.util.Log.d("UriParser", "Input is plain URIs, not base64")
+                LogManager.d(TAG, "Input is plain URIs, not base64")
                 text // Not base64, plain URIs
             } else {
                 val decoded = String(Base64.decode(cleanInput, Base64.DEFAULT))
-                android.util.Log.d("UriParser", "Base64 decoded, length=${decoded.length}")
+                LogManager.d(TAG, "Base64 decoded, length=${decoded.length}")
                 decoded
             }
         } catch (e: Exception) {
-            android.util.Log.w("UriParser", "Not base64: ${e.message}")
+            LogManager.w(TAG, "Not base64: ${e.message}")
             text // Not valid base64, use original
         }
         
         val lines = decodedText.lines()
         val vlessLines = lines.map { it.trim() }.filter { it.startsWith("vless://") }
-        android.util.Log.d("UriParser", "Total lines: ${lines.size}, VLESS lines: ${vlessLines.size}")
+        LogManager.d(TAG, "Total lines: ${lines.size}, VLESS lines: ${vlessLines.size}")
         
         vlessLines.forEach { line ->
             val parsed = parse(line)
-            android.util.Log.d("UriParser", "Parsed '${line.take(50)}...' -> ${if (parsed != null) "OK" else "FAILED"}")
+            LogManager.d(TAG, "Parsed '${line.take(50)}...' -> ${if (parsed != null) "OK" else "FAILED"}")
             if (parsed != null) configs.add(parsed)
         }
         
-        android.util.Log.i("UriParser", "parseMultiple result: ${configs.size} configs")
+        LogManager.i(TAG, "parseMultiple result: ${configs.size} configs")
         return configs
     }
     

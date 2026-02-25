@@ -1,11 +1,13 @@
 package com.raccoonsquad.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.raccoonsquad.core.util.NodeTester
 import com.raccoonsquad.core.cosmetic.CosmeticPresets
+import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.repository.NodeRepository
 import com.raccoonsquad.data.parser.UriParser
@@ -64,27 +66,35 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
      * Import nodes from text (clipboard/manual)
      */
     fun importNodes(text: String) {
+        LogManager.i("ViewModel", "=== importNodes() called, text length=${text.length} ===")
         viewModelScope.launch {
             _isImporting.value = true
             _importError.value = null
             
             try {
+                LogManager.d("ViewModel", "Parsing text...")
                 val configs = withContext(Dispatchers.Default) {
                     UriParser.parseMultiple(text)
                 }
                 
+                LogManager.i("ViewModel", "Parsed ${configs.size} configs")
+                
                 if (configs.isEmpty()) {
+                    LogManager.e("ViewModel", "No VLESS links found!")
                     _importError.value = "Не найдено VLESS ссылок"
                     _isImporting.value = false
                     return@launch
                 }
                 
+                LogManager.d("ViewModel", "Saving to repository...")
                 withContext(Dispatchers.IO) {
                     repository.addNodes(configs)
                 }
                 
+                LogManager.i("ViewModel", "=== importNodes() SUCCESS: ${configs.size} nodes ===")
                 _importCount.value = configs.size
             } catch (e: Exception) {
+                LogManager.e("ViewModel", "importNodes() FAILED: ${e.message}", e)
                 _importError.value = "Ошибка: ${e.message}"
             } finally {
                 _isImporting.value = false
@@ -96,33 +106,43 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
      * Import from subscription URL
      */
     fun importFromUrl(url: String) {
+        LogManager.i("ViewModel", "=== importFromUrl() called, url=$url ===")
         viewModelScope.launch {
             _isImporting.value = true
             _importError.value = null
             
             try {
+                LogManager.d("ViewModel", "Fetching subscription...")
                 val result = NodeTester.fetchSubscription(url)
                 
                 result.fold(
                     onSuccess = { content ->
+                        LogManager.i("ViewModel", "Fetched ${content.length} bytes, parsing...")
                         val configs = withContext(Dispatchers.Default) {
                             UriParser.parseMultiple(content)
                         }
                         
+                        LogManager.i("ViewModel", "Parsed ${configs.size} configs from subscription")
+                        
                         if (configs.isEmpty()) {
+                            LogManager.e("ViewModel", "No VLESS links in subscription!")
                             _importError.value = "В подписке нет VLESS ссылок"
                         } else {
+                            LogManager.d("ViewModel", "Saving to repository...")
                             withContext(Dispatchers.IO) {
                                 repository.addNodes(configs)
                             }
+                            LogManager.i("ViewModel", "=== importFromUrl() SUCCESS: ${configs.size} nodes ===")
                             _importCount.value = configs.size
                         }
                     },
                     onFailure = { error ->
+                        LogManager.e("ViewModel", "Fetch FAILED: ${error.message}")
                         _importError.value = "Ошибка загрузки: ${error.message}"
                     }
                 )
             } catch (e: Exception) {
+                LogManager.e("ViewModel", "importFromUrl() CRASHED: ${e.message}", e)
                 _importError.value = "Ошибка: ${e.message}"
             } finally {
                 _isImporting.value = false
