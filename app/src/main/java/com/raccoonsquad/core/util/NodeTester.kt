@@ -147,26 +147,34 @@ object NodeTester {
      * Test node URL without active VPN - creates temporary connection
      * Simple TCP-based test that doesn't require VPN service
      */
-    fun testNodeUrl(config: VlessConfig): TestResult {
-        return try {
+    suspend fun testNodeUrl(config: VlessConfig): TestResult = withContext(Dispatchers.IO) {
+        // Validate config first
+        if (config.serverAddress.isBlank()) {
+            LogManager.w(TAG, "URL test ${config.name}: invalid server address")
+            return@withContext TestResult(success = false, error = "Invalid server address")
+        }
+        if (config.port <= 0 || config.port > 65535) {
+            LogManager.w(TAG, "URL test ${config.name}: invalid port ${config.port}")
+            return@withContext TestResult(success = false, error = "Invalid port: ${config.port}")
+        }
+        
+        return@withContext try {
             val startTime = System.currentTimeMillis()
             
-            // Simple test: TCP connect + TLS handshake simulation
-            // For VLESS/Reality, we test if we can reach the server
+            // Simple test: TCP connect - for VLESS/Reality this checks server reachability
             Socket().use { socket ->
                 socket.soTimeout = 8000
                 socket.connect(InetSocketAddress(config.serverAddress, config.port), 8000)
                 
-                // For Reality, check if TLS handshake would work
-                // We just measure the connection time for now
                 val latency = System.currentTimeMillis() - startTime
                 
                 LogManager.d(TAG, "URL test ${config.name}: ✓ ${latency}ms")
                 TestResult(success = true, latencyMs = latency, isWorking = true)
             }
         } catch (e: Exception) {
-            LogManager.w(TAG, "URL test ${config.name} FAILED: ${e.message}")
-            TestResult(success = false, error = e.message)
+            val errorMsg = e.message ?: e.javaClass.simpleName
+            LogManager.w(TAG, "URL test ${config.name} FAILED: $errorMsg")
+            TestResult(success = false, error = errorMsg)
         }
     }
     
