@@ -453,6 +453,198 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         _importCount.value = 0
     }
     
+    // URL test state
+    private val _urlTestResult = MutableStateFlow<String?>(null)
+    val urlTestResult: StateFlow<String?> = _urlTestResult.asStateFlow()
+    
+    /**
+     * Test URL through active VPN connection and update rating stats
+     */
+    fun testUrlThroughVpn() {
+        viewModelScope.launch {
+            val activeConfig = nodes.value.find { it.id == activeNodeId.value }
+            if (activeConfig == null) {
+                _urlTestResult.value = "❌ Нет активной ноды"
+                return@launch
+            }
+            
+            _urlTestResult.value = "testing"
+            
+            withContext(Dispatchers.IO) {
+                try {
+                    val startTime = System.currentTimeMillis()
+                    
+                    val proxy = java.net.Proxy(
+                        java.net.Proxy.Type.HTTP,
+                        java.net.InetSocketAddress("127.0.0.1", 10809)
+                    )
+                    val client = okhttp3.OkHttpClient.Builder()
+                        .proxy(proxy)
+                        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+                    
+                    val request = okhttp3.Request.Builder()
+                        .url("https://www.google.com/generate_204")
+                        .build()
+                    
+                    val response = client.newCall(request).execute()
+                    val latency = System.currentTimeMillis() - startTime
+                    
+                    val success = response.isSuccessful || response.code == 204
+                    
+                    // Update rating stats
+                    val updatedConfig = activeConfig.copy(
+                        connectionSuccess = activeConfig.connectionSuccess + if (success) 1 else 0,
+                        connectionFails = activeConfig.connectionFails + if (success) 0 else 1,
+                        lastUrlLatency = if (success) latency else -1L,
+                        lastTestTime = System.currentTimeMillis()
+                    )
+                    
+                    repository.updateNode(updatedConfig)
+                    
+                    withContext(Dispatchers.Main) {
+                        if (success) {
+                            _urlTestResult.value = "✅ URL тест: ${latency}ms"
+                        } else {
+                            _urlTestResult.value = "❌ HTTP ${response.code}"
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Update failure stats
+                    val updatedConfig = activeConfig.copy(
+                        connectionFails = activeConfig.connectionFails + 1,
+                        lastUrlLatency = -1L,
+                        lastTestTime = System.currentTimeMillis()
+                    )
+                    repository.updateNode(updatedConfig)
+                    
+                    withContext(Dispatchers.Main) {
+                        _urlTestResult.value = "❌ Ошибка: ${e.message?.take(30)}"
+                    }
+                }
+            }
+        }
+    }
+    
+    fun clearUrlTestResult() {
+        _urlTestResult.value = null
+    }
+    
+    // Brute force state
+    private val _bruteForceState = MutableStateFlow<BruteForceState>(BruteForceState.Idle)
+    val bruteForceState: StateFlow<BruteForceState> = _bruteForceState.asStateFlow()
+    
+    sealed class BruteForceState {
+        object Idle : BruteForceState()
+        data class Running(val attempt: Int, val maxAttempts: Int) : BruteForceState()
+        data class Success(val attempt: Int, val latency: Long) : BruteForceState()
+        data class Failed(val attempts: Int) : BruteForceState()
+    }
+    
+    /**
+     * Brute force cosmetics - try random cosmetics until node works
+     * Requires VPN to be connected to this node first
+     */
+    fun bruteForceCosmetics(
+        config: VlessConfig,
+        onReconnectNeeded: (VlessConfig) -> Unit
+    ) {
+        testJob?.cancel()
+        testJob = viewModelScope.launch {
+            val maxAttempts = 20
+            var currentConfig = config
+            
+            for (attempt in 1..maxAttempts) {
+                // Check if cancelled
+                if (!isActive) {
+                    LogManager.i("ViewModel", "Brute force cancelled by user")
+                    _bruteForceState.value = BruteForceState.Idle
+                    return@launch
+                }
+                
+                _bruteForceState.value = BruteForceState.Running(attempt, maxAttempts)
+                
+                // Apply random cosmetics (except first attempt - test current config)
+                if (attempt > 1) {
+                    currentConfig = CosmeticPresets.randomize(currentConfig)
+                }
+                
+                // Notify UI to reconnect VPN with new config
+                onReconnectNeeded(currentConfig)
+                
+                // Wait for VPN to establish
+                kotlinx.coroutines.delay(3000)
+                
+                // Test URL
+                val success = testUrlDirect(currentConfig)
+                
+                if (success.first) {
+                    // Found working config!
+                    repository.updateNode(currentConfig)
+                    _bruteForceState.value = BruteForceState.Success(attempt, success.second)
+                    testJob = null
+                    return@launch
+                }
+            }
+            
+            _bruteForceState.value = BruteForceState.Failed(maxAttempts)
+            testJob = null
+        }
+    }
+    
+    private suspend fun testUrlDirect(config: VlessConfig): Pair<Boolean, Long> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val startTime = System.currentTimeMillis()
+                
+                val proxy = java.net.Proxy(
+                    java.net.Proxy.Type.HTTP,
+                    java.net.InetSocketAddress("127.0.0.1", 10809)
+                )
+                val client = okhttp3.OkHttpClient.Builder()
+                    .proxy(proxy)
+                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                
+                val request = okhttp3.Request.Builder()
+                    .url("https://www.google.com/generate_204")
+                    .build()
+                
+                val response = client.newCall(request).execute()
+                val latency = System.currentTimeMillis() - startTime
+                
+                val success = response.isSuccessful || response.code == 204
+                
+                // Update rating stats
+                val updatedConfig = config.copy(
+                    connectionSuccess = config.connectionSuccess + if (success) 1 else 0,
+                    connectionFails = config.connectionFails + if (success) 0 else 1,
+                    lastUrlLatency = if (success) latency else -1L,
+                    lastTestTime = System.currentTimeMillis()
+                )
+                repository.updateNode(updatedConfig)
+                
+                Pair(success, latency)
+            } catch (e: Exception) {
+                // Update failure stats
+                val updatedConfig = config.copy(
+                    connectionFails = config.connectionFails + 1,
+                    lastUrlLatency = -1L,
+                    lastTestTime = System.currentTimeMillis()
+                )
+                repository.updateNode(updatedConfig)
+                
+                Pair(false, 0L)
+            }
+        }
+    }
+    
+    fun resetBruteForceState() {
+        _bruteForceState.value = BruteForceState.Idle
+    }
+    
     fun toUiState(config: VlessConfig, activeId: String?, index: Int): NodeUiState {
         return NodeUiState(
             id = config.id,

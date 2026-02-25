@@ -276,7 +276,12 @@ class NodeRepository private constructor(private val context: Context) {
             put("tcpKeepAliveInterval", config.tcpKeepAliveInterval)
             put("mtu", config.mtu)
             put("isFavorite", config.isFavorite)
-            put("latency", config.latency ?: JSONObject.NULL)  // Save latency!
+            put("latency", config.latency ?: JSONObject.NULL)
+            // Rating fields
+            put("connectionSuccess", config.connectionSuccess)
+            put("connectionFails", config.connectionFails)
+            put("lastUrlLatency", config.lastUrlLatency ?: JSONObject.NULL)
+            put("lastTestTime", config.lastTestTime ?: JSONObject.NULL)
         }
     }
     
@@ -306,7 +311,12 @@ class NodeRepository private constructor(private val context: Context) {
             tcpKeepAliveInterval = obj.optInt("tcpKeepAliveInterval", 30),
             mtu = obj.optString("mtu", "default"),
             isFavorite = obj.optBoolean("isFavorite", false),
-            latency = if (obj.isNull("latency")) null else obj.optLong("latency")  // Read latency!
+            latency = if (obj.isNull("latency")) null else obj.optLong("latency"),
+            // Rating fields
+            connectionSuccess = obj.optInt("connectionSuccess", 0),
+            connectionFails = obj.optInt("connectionFails", 0),
+            lastUrlLatency = if (obj.isNull("lastUrlLatency")) null else obj.optLong("lastUrlLatency"),
+            lastTestTime = if (obj.isNull("lastTestTime")) null else obj.optLong("lastTestTime")
         )
     }
 }

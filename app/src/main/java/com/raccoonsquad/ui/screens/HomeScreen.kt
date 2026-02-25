@@ -399,27 +399,20 @@ fun HomeScreen(
     
     // Test Dialog
     if (showTestDialog) {
+        val bruteForceState by viewModel.bruteForceState.collectAsState()
+        val activeConfig by remember { derivedStateOf { nodes.value.find { it.id == activeId } } }
+        
         TestDialog(
             isAutoTesting = isAutoTesting,
             isVpnActive = isVpnActive,
             testProgress = testProgress,
+            bruteForceState = bruteForceState,
             onTestAllTcp = {
                 viewModel.testAllNodes(NodeTester.TestMethod.TCP)
                 showTestDialog = false  // Auto-close
             },
             onTestUrl = {
-                // URL test through active VPN - measures real latency
-                GlobalScope.launch(Dispatchers.IO) {
-                    val result = NodeTester.testThroughActiveProxy()
-                    withContext(Dispatchers.Main) {
-                        if (result.success) {
-                            snackbarHostState.showSnackbar("✅ URL тест: ${result.latencyMs}ms")
-                        } else {
-                            snackbarHostState.showSnackbar("❌ ${result.error?.take(30) ?: "Ошибка"}")
-                        }
-                    }
-                }
-                showTestDialog = false  // Auto-close
+                viewModel.testUrlThroughVpn()
             },
             onTestAllUrl = {
                 viewModel.testAllNodesWithUrl()
@@ -429,6 +422,20 @@ fun HomeScreen(
                 viewModel.testAllNodesThroughVpn()
                 showTestDialog = false  // Auto-close
             },
+            onBruteForce = {
+                activeConfig?.let { config ->
+                    viewModel.bruteForceCosmetics(config) { updatedConfig ->
+                        // Reconnect VPN with new config
+                        VpnController.stopVpn(context)
+                        viewModel.setActiveNode(null)
+                        GlobalScope.launch {
+                            kotlinx.coroutines.delay(500)
+                            VpnController.startVpn(context, updatedConfig)
+                            viewModel.setActiveNode(updatedConfig.id)
+                        }
+                    }
+                }
+            },
             onCancelTest = {
                 viewModel.cancelTest()
             },
@@ -436,7 +443,10 @@ fun HomeScreen(
                 viewModel.autoTestAndClean(NodeTester.TestMethod.TCP)
                 showTestDialog = false  // Auto-close
             },
-            onDismiss = { showTestDialog = false }
+            onDismiss = { 
+                showTestDialog = false
+                viewModel.resetBruteForceState()
+            }
         )
     }
     
@@ -786,16 +796,19 @@ fun TestDialog(
     isAutoTesting: Boolean,
     isVpnActive: Boolean = false,
     testProgress: Pair<Int, Int> = 0 to 0,  // tested / total
+    bruteForceState: NodeViewModel.BruteForceState = NodeViewModel.BruteForceState.Idle,
     onTestAllTcp: () -> Unit,
     onTestUrl: () -> Unit = {},
     onTestAllUrl: () -> Unit = {},  // Test all nodes with URL (no VPN needed)
     onTestAllThroughVpn: () -> Unit = {},  // Test all nodes through VPN
+    onBruteForce: () -> Unit = {},  // Brute force cosmetics
     onCancelTest: () -> Unit = {},  // Cancel current test
     onAutoCleanTcp: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val (tested, total) = testProgress
-    val isTesting = isAutoTesting || total > 0
+    val isBruteForcing = bruteForceState is NodeViewModel.BruteForceState.Running
+    val isTesting = isAutoTesting || total > 0 || isBruteForcing
     
     AlertDialog(
         onDismissRequest = if (isTesting) { {} } else onDismiss,
@@ -815,15 +828,42 @@ fun TestDialog(
                                 .padding(12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                "Тестирование: $tested / $total",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = { if (total > 0) tested.toFloat() / total else 0f },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            when (val state = bruteForceState) {
+                                is NodeViewModel.BruteForceState.Running -> {
+                                    Text(
+                                        "🎲 Подбор косметики: ${state.attempt}/${state.maxAttempts}",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                }
+                                is NodeViewModel.BruteForceState.Success -> {
+                                    Text(
+                                        "✅ Успех! Попытка ${state.attempt}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color(0xFF4CAF50)
+                                    )
+                                    Text("Latency: ${state.latency}ms")
+                                }
+                                is NodeViewModel.BruteForceState.Failed -> {
+                                    Text(
+                                        "❌ Не удалось за ${state.attempts} попыток",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                else -> {
+                                    Text(
+                                        "Тестирование: $tested / $total",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    LinearProgressIndicator(
+                                        progress = { if (total > 0) tested.toFloat() / total else 0f },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = onCancelTest,
@@ -897,6 +937,26 @@ fun TestDialog(
                         )
                     ) {
                         Text("🔄 Тест ВСЕХ через активный VPN")
+                    }
+                    
+                    // Brute force section
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    Text("Подбор косметики:", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        "Пробует разные настройки маскировки (до 20 попыток)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    
+                    Button(
+                        onClick = onBruteForce,
+                        enabled = !isTesting,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF9C27B0)
+                        )
+                    ) {
+                        Text("🎲 Подобрать косметику")
                     }
                 }
                 
