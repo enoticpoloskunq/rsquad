@@ -56,10 +56,101 @@ data class VlessConfig(
     
     // Status
     val isActive: Boolean = false,
-    val latency: Long? = null,
+    val latency: Long? = null,  // TCP ping latency
     val lastConnected: Long? = null,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    
+    // Smart Rating fields
+    val connectionSuccess: Int = 0,  // Successful connections count
+    val connectionFails: Int = 0,    // Failed connections count
+    val lastUrlLatency: Long? = null, // URL test latency (real VPN speed)
+    val lastTestTime: Long? = null   // Last time node was tested
 ) : Parcelable {
+    
+    /**
+     * Calculate smart rating score (0-100)
+     * - Ping (30%): lower is better
+     * - Stability (40%): success rate
+     * - Freshness (20%): recently tested
+     * - Speed (10%): URL latency if available
+     */
+    fun calculateScore(): Int {
+        var score = 0
+        
+        // Ping score (30 points)
+        val ping = latency
+        if (ping != null && ping > 0) {
+            score += when {
+                ping < 100 -> 30
+                ping < 200 -> 25
+                ping < 300 -> 20
+                ping < 500 -> 15
+                else -> 10
+            }
+        }
+        
+        // Stability score (40 points)
+        val totalConnections = connectionSuccess + connectionFails
+        if (totalConnections > 0) {
+            val successRate = connectionSuccess.toFloat() / totalConnections
+            score += (successRate * 40).toInt()
+        } else {
+            score += 20 // Neutral if never connected
+        }
+        
+        // Freshness score (20 points)
+        val testTime = lastTestTime
+        if (testTime != null) {
+            val hoursAgo = (System.currentTimeMillis() - testTime) / (1000 * 60 * 60)
+            score += when {
+                hoursAgo < 1 -> 20
+                hoursAgo < 6 -> 15
+                hoursAgo < 24 -> 10
+                hoursAgo < 72 -> 5
+                else -> 0
+            }
+        }
+        
+        // Speed score (10 points) - URL latency is more accurate
+        val urlLat = lastUrlLatency
+        if (urlLat != null && urlLat > 0) {
+            score += when {
+                urlLat < 500 -> 10
+                urlLat < 1000 -> 8
+                urlLat < 2000 -> 5
+                else -> 2
+            }
+        }
+        
+        return score.coerceIn(0, 100)
+    }
+    
+    /**
+     * Get rating stars (1-5)
+     */
+    fun getRatingStars(): Int {
+        val score = calculateScore()
+        return when {
+            score >= 80 -> 5
+            score >= 60 -> 4
+            score >= 40 -> 3
+            score >= 20 -> 2
+            else -> 1
+        }
+    }
+    
+    /**
+     * Get rating emoji
+     */
+    fun getRatingEmoji(): String {
+        return when (getRatingStars()) {
+            5 -> "⭐⭐⭐⭐⭐"
+            4 -> "⭐⭐⭐⭐"
+            3 -> "⭐⭐⭐"
+            2 -> "⭐⭐"
+            else -> "⭐"
+        }
+    }
     
     // Legacy property aliases for backward compatibility
     val fragmentationPackets: String get() = fragmentPackets
@@ -145,7 +236,11 @@ data class VlessConfig(
         tcpKeepAlive = parcel.readByte() != 0.toByte(),
         tcpKeepAliveInterval = parcel.readInt(),
         mtu = parcel.readString() ?: "1500",
-        isFavorite = parcel.readByte() != 0.toByte()
+        isFavorite = parcel.readByte() != 0.toByte(),
+        connectionSuccess = parcel.readInt(),
+        connectionFails = parcel.readInt(),
+        lastUrlLatency = parcel.readLong().let { if (it == -1L) null else it },
+        lastTestTime = parcel.readLong().let { if (it == -1L) null else it }
     )
     
     override fun writeToParcel(parcel: Parcel, flags: Int) {
@@ -176,6 +271,10 @@ data class VlessConfig(
         parcel.writeInt(tcpKeepAliveInterval)
         parcel.writeString(mtu)
         parcel.writeByte(if (isFavorite) 1 else 0)
+        parcel.writeInt(connectionSuccess)
+        parcel.writeInt(connectionFails)
+        parcel.writeLong(lastUrlLatency ?: -1L)
+        parcel.writeLong(lastTestTime ?: -1L)
     }
     
     override fun describeContents(): Int = 0
