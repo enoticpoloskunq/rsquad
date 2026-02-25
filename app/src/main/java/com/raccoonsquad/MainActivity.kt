@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.raccoonsquad.ui.RaccoonApp
 import com.raccoonsquad.ui.screens.onVpnPermissionResult
 import com.raccoonsquad.ui.theme.RaccoonSquadTheme
@@ -16,8 +17,16 @@ import com.raccoonsquad.ui.theme.RaccoonSquadTheme
 class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Install splash screen before super.onCreate()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Keep splash screen visible while loading data
+        splashScreen.setKeepOnScreenCondition {
+            // Return true to keep splash, false to dismiss
+            false
+        }
         
         handleIntent(intent)
         

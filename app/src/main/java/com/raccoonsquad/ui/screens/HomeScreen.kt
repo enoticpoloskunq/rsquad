@@ -890,9 +890,11 @@ fun NodeCard(
         else -> Color(0xFFF44336)
     }
     
+    // Fixed height for predictable layout (faster recomposition)
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(64.dp)
             .clickable { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = if (node.isActive) 
@@ -900,7 +902,8 @@ fun NodeCard(
             else 
                 MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (node.isActive) 2.dp else 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (node.isActive) 2.dp else 0.dp),
+        shape = MaterialTheme.shapes.small
     ) {
         Row(
             modifier = Modifier
