@@ -2,9 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
   build:
@@ -19,15 +19,40 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     
+    # Gradle cache - significantly speeds up builds
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 9.3.1
+        cache-read-only: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
+    
+    # Cache Gradle dependencies
+    - name: Cache Gradle packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/.android/build-cache
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/gradle.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    # Cache libv2ray.aar to avoid re-downloading
+    - name: Cache libv2ray.aar
+      id: cache-libv2ray
+      uses: actions/cache@v4
+      with:
+        path: app/libs/libv2ray.aar
+        key: libv2ray-aar-${{ hashFiles('app/libs/classes.jar') }}
+        restore-keys: |
+          libv2ray-aar-
     
     - name: Create libs directory
       run: mkdir -p app/libs
     
     - name: Download libv2ray.aar
+      if: steps.cache-libv2ray.outputs.cache-hit != 'true'
       run: |
         curl -L -o app/libs/libv2ray.aar \
           "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
