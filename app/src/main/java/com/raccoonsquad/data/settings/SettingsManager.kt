@@ -3,7 +3,9 @@ package com.raccoonsquad.data.settings
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.raccoonsquad.ui.theme.AppTheme
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +18,10 @@ class SettingsManager(private val context: Context) {
     companion object {
         private val THEME_KEY = stringPreferencesKey("app_theme")
         private val LAST_CONNECTED_ID = stringPreferencesKey("last_connected_id")
+        private val SUCCESSFUL_CONNECTIONS = intPreferencesKey("successful_connections")
+        private val RATING_SHOWN = booleanPreferencesKey("rating_shown")
+        
+        const val RATING_THRESHOLD = 5  // Show rating after 5 successful connections
     }
     
     val theme: Flow<AppTheme> = context.dataStore.data
@@ -46,6 +52,36 @@ class SettingsManager(private val context: Context) {
             } else {
                 preferences.remove(LAST_CONNECTED_ID)
             }
+        }
+    }
+    
+    // Smart Rating
+    val successfulConnections: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[SUCCESSFUL_CONNECTIONS] ?: 0
+        }
+    
+    val ratingShown: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[RATING_SHOWN] ?: false
+        }
+    
+    suspend fun incrementSuccessfulConnections() {
+        context.dataStore.edit { preferences ->
+            val current = preferences[SUCCESSFUL_CONNECTIONS] ?: 0
+            preferences[SUCCESSFUL_CONNECTIONS] = current + 1
+        }
+    }
+    
+    suspend fun setRatingShown(shown: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[RATING_SHOWN] = shown
+        }
+    }
+    
+    suspend fun resetConnectionCounter() {
+        context.dataStore.edit { preferences ->
+            preferences[SUCCESSFUL_CONNECTIONS] = 0
         }
     }
 }

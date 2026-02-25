@@ -31,7 +31,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raccoonsquad.core.vpn.RaccoonVpnService
 import com.raccoonsquad.core.util.NodeTester
 import com.raccoonsquad.core.stats.TrafficStats
+import com.raccoonsquad.core.diagnosis.Doctor
 import com.raccoonsquad.data.model.VlessConfig
+import com.raccoonsquad.data.settings.SettingsManager
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
 import kotlinx.coroutines.Dispatchers
@@ -100,6 +102,7 @@ fun HomeScreen(
     var showTestDialog by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var showCosmeticDialog by remember { mutableStateOf(false) }
+    var showDoctorDialog by remember { mutableStateOf(false) }
     
     var sortOrder by remember { mutableStateOf(SortOrder.FAVORITES_FIRST) }
     
@@ -248,6 +251,9 @@ fun HomeScreen(
                         }
                         IconButton(onClick = { showTestDialog = true }) {
                             Icon(Icons.Default.Speed, "Test")
+                        }
+                        IconButton(onClick = { showDoctorDialog = true }) {
+                            Icon(Icons.Default.Healing, "Doctor")
                         }
                         IconButton(onClick = { showClearDialog = true }) {
                             Icon(Icons.Default.DeleteSweep, "Clear")
@@ -470,6 +476,15 @@ fun HomeScreen(
                 viewModel.randomizeAllCosmetics()
                 showCosmeticDialog = false
             }
+        )
+    }
+    
+    // Doctor Dialog
+    if (showDoctorDialog) {
+        DoctorDialog(
+            activeConfig = activeNode?.config,
+            isVpnActive = isVpnActive,
+            onDismiss = { showDoctorDialog = false }
         )
     }
 }
@@ -1116,6 +1131,84 @@ fun CosmeticDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("Закрыть")
+            }
+        }
+    )
+}
+
+@Composable
+fun DoctorDialog(
+    activeConfig: VlessConfig?,
+    isVpnActive: Boolean,
+    onDismiss: () -> Unit
+) {
+    var isRunning by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<Doctor.DiagnosisResult?>(null) }
+    
+    LaunchedEffect(Unit) {
+        isRunning = true
+        result = Doctor.diagnose(activeConfig, isVpnActive)
+        isRunning = false
+    }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Text("🩺", style = MaterialTheme.typography.headlineMedium) },
+        title = { Text("Диагностика") },
+        text = {
+            if (isRunning) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator()
+                    Text("Проверка...")
+                }
+            } else if (result != null) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    result!!.checks.forEach { check ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(if (check.success) "✅" else "❌")
+                            Column {
+                                Text(
+                                    check.type.name,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                Text(
+                                    check.message,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (result!!.overallSuccess)
+                                Color(0xFF1B5E20).copy(alpha = 0.3f)
+                            else
+                                Color(0xFFB71C1C).copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Text(
+                            result!!.recommendation,
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("OK")
             }
         }
     )
