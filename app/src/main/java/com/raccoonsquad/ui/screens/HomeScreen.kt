@@ -359,6 +359,26 @@ fun HomeScreen(
                     )
                 }
             } else {
+                // Pull-to-refresh
+                var isRefreshing by remember { mutableStateOf(false) }
+                
+                Box(modifier = Modifier.fillMaxSize()) {
+                    androidx.compose.material.pullrefresh.PullRefreshIndicator(
+                        refreshing = isRefreshing,
+                        pullRefreshState = androidx.compose.material.pullrefresh.rememberPullRefreshState(
+                            refreshing = isRefreshing,
+                            onRefresh = {
+                                isRefreshing = true
+                                viewModel.testAllNodes(NodeTester.TestMethod.TCP)
+                                isRefreshing = false
+                            }
+                        ),
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        backgroundColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -419,31 +439,14 @@ fun HomeScreen(
             isVpnActive = isVpnActive,
             onTestAllTcp = { viewModel.testAllNodes(NodeTester.TestMethod.TCP) },
             onTestUrl = {
-                // URL test uses SOCKS proxy when VPN is active
+                // URL test through active VPN - measures real latency
                 GlobalScope.launch(Dispatchers.IO) {
-                    try {
-                        val proxy = java.net.Proxy(
-                            java.net.Proxy.Type.SOCKS,
-                            java.net.InetSocketAddress("127.0.0.1", 10808)
-                        )
-                        val client = okhttp3.OkHttpClient.Builder()
-                            .proxy(proxy)
-                            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                            .build()
-                        val request = okhttp3.Request.Builder()
-                            .url("https://www.google.com/generate_204")
-                            .build()
-                        val response = client.newCall(request).execute()
-                        withContext(Dispatchers.Main) {
-                            if (response.isSuccessful || response.code == 204) {
-                                snackbarHostState.showSnackbar("✅ URL тест успешен!")
-                            } else {
-                                snackbarHostState.showSnackbar("❌ HTTP ${response.code}")
-                            }
-                        }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            snackbarHostState.showSnackbar("❌ Ошибка: ${e.message?.take(30)}")
+                    val result = NodeTester.testThroughActiveProxy()
+                    withContext(Dispatchers.Main) {
+                        if (result.success) {
+                            snackbarHostState.showSnackbar("✅ URL тест: ${result.latencyMs}ms")
+                        } else {
+                            snackbarHostState.showSnackbar("❌ ${result.error?.take(30) ?: "Ошибка"}")
                         }
                     }
                 }

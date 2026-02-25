@@ -104,6 +104,46 @@ object NodeTester {
     }
     
     /**
+     * Test through active VPN connection (via SOCKS5 proxy)
+     * Uses the existing VPN tunnel - no need to start new connection
+     */
+    fun testThroughActiveProxy(): TestResult {
+        return try {
+            val startTime = System.currentTimeMillis()
+            
+            // Use SOCKS5 proxy provided by Xray (127.0.0.1:10808)
+            val proxy = java.net.Proxy(
+                java.net.Proxy.Type.SOCKS,
+                InetSocketAddress("127.0.0.1", 10808)
+            )
+            
+            val client = OkHttpClient.Builder()
+                .proxy(proxy)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+            
+            val request = Request.Builder()
+                .url("https://www.google.com/generate_204")
+                .get()
+                .build()
+            
+            client.newCall(request).execute().use { response ->
+                val latency = System.currentTimeMillis() - startTime
+                if (response.isSuccessful || response.code == 204) {
+                    LogManager.d(TAG, "URL test through active VPN: ✓ ${latency}ms")
+                    TestResult(success = true, latencyMs = latency, isWorking = true)
+                } else {
+                    TestResult(success = false, error = "HTTP ${response.code}")
+                }
+            }
+        } catch (e: Exception) {
+            LogManager.e(TAG, "URL test through active VPN failed: ${e.message}")
+            TestResult(success = false, error = e.message)
+        }
+    }
+    
+    /**
      * Test real VPN connectivity - connect through VPN and make HTTP request
      */
     private fun testUrlThroughVpn(config: VlessConfig, vpnService: VpnService): TestResult {
