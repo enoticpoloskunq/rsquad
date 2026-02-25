@@ -12,6 +12,7 @@ import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.repository.NodeRepository
 import com.raccoonsquad.data.parser.UriParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
