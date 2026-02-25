@@ -1,7 +1,12 @@
 package com.raccoonsquad.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,24 +22,51 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.raccoonsquad.App
 import com.raccoonsquad.core.log.LogManager
+import com.raccoonsquad.data.settings.SettingsManager
 import com.raccoonsquad.ui.screens.HomeScreen
 import com.raccoonsquad.ui.screens.LogsScreen
 import com.raccoonsquad.ui.screens.NodeEditorScreen
+import com.raccoonsquad.ui.screens.SettingsScreen
+import com.raccoonsquad.ui.theme.AppTheme
+import com.raccoonsquad.ui.theme.RaccoonSquadTheme
+import kotlinx.coroutines.launch
 import java.io.File
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object NodeEditor : Screen("node_editor")
     object Logs : Screen("logs")
+    object Settings : Screen("settings")
 }
 
 @Composable
 fun RaccoonApp(
     navController: NavHostController = rememberNavController()
 ) {
-    var selectedNodeId by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val settingsManager = remember { SettingsManager(context) }
+    
+    // Load theme from settings
+    val appTheme by settingsManager.theme.collectAsState(initial = AppTheme.PURPLE)
+    
+    var selectedNodeId by remember { mutableStateOf<String?>(null) }
     var showCrashDialog by remember { mutableStateOf(App.hasPendingCrashExport) }
+    
+    // Request notification permission on Android 13+
+    var hasNotificationPermission by remember { mutableStateOf(checkNotificationPermission(context)) }
+    
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasNotificationPermission = granted
+    }
+    
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     
     // Crash export dialog
     if (showCrashDialog) {
@@ -53,51 +85,74 @@ fun RaccoonApp(
         )
     }
     
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = true,
-                    onClick = { navController.navigate(Screen.Home.route) },
-                    icon = { Text("🦝") },
-                    label = { Text("Nodes") }
-                )
-                NavigationBarItem(
-                    selected = false,
-                    onClick = { navController.navigate(Screen.Logs.route) },
-                    icon = { Text("📋") },
-                    label = { Text("Logs") }
-                )
+    RaccoonSquadTheme(theme = appTheme) {
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = navController.currentDestination?.route == Screen.Home.route,
+                        onClick = { navController.navigate(Screen.Home.route) },
+                        icon = { Text("🦝") },
+                        label = { Text("Nodes") }
+                    )
+                    NavigationBarItem(
+                        selected = navController.currentDestination?.route == Screen.Logs.route,
+                        onClick = { navController.navigate(Screen.Logs.route) },
+                        icon = { Text("📋") },
+                        label = { Text("Logs") }
+                    )
+                    NavigationBarItem(
+                        selected = navController.currentDestination?.route == Screen.Settings.route,
+                        onClick = { navController.navigate(Screen.Settings.route) },
+                        icon = { Text("⚙️") },
+                        label = { Text("Settings") }
+                    )
+                }
+            }
+        ) { padding ->
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Home.route,
+                modifier = Modifier.padding(padding)
+            ) {
+                composable(Screen.Home.route) {
+                    HomeScreen(
+                        onAddNode = { navController.navigate(Screen.NodeEditor.route) },
+                        onNodeClick = { nodeId ->
+                            selectedNodeId = nodeId
+                            navController.navigate(Screen.Logs.route)
+                        }
+                    )
+                }
+                composable(Screen.NodeEditor.route) {
+                    NodeEditorScreen(
+                        onBack = { navController.popBackStack() },
+                        onSave = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.Logs.route) {
+                    LogsScreen(
+                        nodeId = selectedNodeId,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.Settings.route) {
+                    SettingsScreen(
+                        settingsManager = settingsManager,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
-    ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Home.route,
-            modifier = Modifier.padding(padding)
-        ) {
-            composable(Screen.Home.route) {
-                HomeScreen(
-                    onAddNode = { navController.navigate(Screen.NodeEditor.route) },
-                    onNodeClick = { nodeId ->
-                        selectedNodeId = nodeId
-                        navController.navigate(Screen.Logs.route)
-                    }
-                )
-            }
-            composable(Screen.NodeEditor.route) {
-                NodeEditorScreen(
-                    onBack = { navController.popBackStack() },
-                    onSave = { navController.popBackStack() }
-                )
-            }
-            composable(Screen.Logs.route) {
-                LogsScreen(
-                    nodeId = selectedNodeId,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-        }
+    }
+}
+
+@Composable
+private fun checkNotificationPermission(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true
     }
 }
 
