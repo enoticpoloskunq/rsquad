@@ -18,7 +18,7 @@ import java.io.File
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "raccoon_nodes")
 
-class NodeRepository(private val context: Context) {
+class NodeRepository private constructor(private val context: Context) {
     
     private val nodesKey = stringPreferencesKey("saved_nodes")
     private val activeNodeKey = stringPreferencesKey("active_node_id")
