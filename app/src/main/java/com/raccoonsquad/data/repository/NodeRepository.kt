@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "raccoon_nodes")
 
@@ -23,6 +24,16 @@ class NodeRepository(private val context: Context) {
     private val activeNodeKey = stringPreferencesKey("active_node_id")
     
     private var cachedNodes: List<VlessConfig> = emptyList()
+    
+    init {
+        // Log DataStore file location
+        try {
+            val dataStoreFile = File(context.filesDir, "datastore/raccoon_nodes.preferences_pb")
+            LogManager.i(TAG, "DataStore file: ${dataStoreFile.absolutePath}, exists=${dataStoreFile.exists()}")
+        } catch (e: Exception) {
+            LogManager.e(TAG, "Failed to check DataStore file", e)
+        }
+    }
     
     companion object {
         private const val TAG = "NodeRepository"
@@ -95,9 +106,17 @@ class NodeRepository(private val context: Context) {
                     }
                 }
                 
-                prefs[nodesKey] = jsonArray.toString()
+                val finalJson = jsonArray.toString()
+                prefs[nodesKey] = finalJson
+                LogManager.i(TAG, "Saved JSON length: ${finalJson.length}")
                 LogManager.i(TAG, "=== addNodes() SUCCESS: $initialCount -> ${jsonArray.length()} nodes ($addedCount added) ===")
             }
+            
+            // Verify after save
+            LogManager.d(TAG, "Verifying save...")
+            val dataStoreFile = File(context.filesDir, "datastore/raccoon_nodes.preferences_pb")
+            LogManager.i(TAG, "DataStore file exists: ${dataStoreFile.exists()}, size: ${if (dataStoreFile.exists()) dataStoreFile.length() else 0}")
+            
         } catch (e: Exception) {
             LogManager.e(TAG, "=== addNodes() FAILED ===", e)
             throw e
