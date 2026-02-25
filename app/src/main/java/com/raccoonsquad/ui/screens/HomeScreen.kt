@@ -101,34 +101,18 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Warm-up state - show loading briefly while Compose initializes
-    var isListReady by remember { mutableStateOf(false) }
-    var visibleNodeCount by remember { mutableStateOf(0) }
+    // Simple state - just track if we've shown nodes at least once
+    var hasLoadedNodes by remember { mutableStateOf(false) }
     
-    // Warm up the list with progressive loading
+    // Update hasLoadedNodes when nodes appear
     LaunchedEffect(nodes.size) {
-        if (nodes.isNotEmpty() && !isListReady) {
-            // Longer warm-up for large lists
-            val warmupTime = if (nodes.size > 100) 500L else 300L
-            kotlinx.coroutines.delay(warmupTime)
-            
-            // Progressive load: start with first 50, then add more smoothly
-            val batchSize = 50
-            visibleNodeCount = minOf(batchSize, nodes.size)
-            isListReady = true
-            
-            // Load rest in batches with small delays (invisible to user)
-            if (nodes.size > batchSize) {
-                while (visibleNodeCount < nodes.size) {
-                    kotlinx.coroutines.delay(50) // tiny delay between batches
-                    visibleNodeCount = minOf(visibleNodeCount + batchSize, nodes.size)
-                }
-            }
-        } else if (nodes.isEmpty()) {
-            isListReady = true
-            visibleNodeCount = 0
+        if (nodes.isNotEmpty()) {
+            hasLoadedNodes = true
         }
     }
+    
+    // Use all nodes directly - Compose handles large lists efficiently with LazyColumn
+    val visibleNodeCount = nodes.size
     
     // Create UI states - use derivedStateOf to prevent unnecessary recompositions
     // Note: latency is stored directly in VlessConfig, not in separate testResults map
@@ -347,18 +331,6 @@ fun HomeScreen(
             
             if (uiStates.isEmpty()) {
                 EmptyState(modifier = Modifier.fillMaxSize())
-            } else if (!isListReady) {
-                // Minimal loading state
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "🦝 ${nodes.size}",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             } else {
                 LazyColumn(
                     state = listState,

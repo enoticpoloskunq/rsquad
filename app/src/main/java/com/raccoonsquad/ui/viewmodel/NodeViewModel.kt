@@ -41,12 +41,12 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     // Use singleton to ensure same DataStore instance
     private val repository = NodeRepository.getInstance(application)
     
-    // Use WhileSubscribed to keep Flow alive and sharing data
+    // Use Eagerly to keep Flow alive and retain data across screen navigation
     val nodes: StateFlow<List<VlessConfig>> = repository.nodes
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     
     val activeNodeId: StateFlow<String?> = repository.activeNodeId
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     
     private val _importError = MutableStateFlow<String?>(null)
     val importError: StateFlow<String?> = _importError.asStateFlow()
