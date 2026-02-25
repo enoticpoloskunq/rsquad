@@ -20,13 +20,26 @@ object UriParser {
      */
     fun parse(uriString: String): VlessConfig? {
         val trimmed = uriString.trim()
-        if (!trimmed.startsWith("vless://")) return null
+        if (!trimmed.startsWith("vless://")) {
+            android.util.Log.w("UriParser", "parse: not a vless URI")
+            return null
+        }
         
         return try {
             val uri = Uri.parse(trimmed)
             
-            val uuid = uri.userInfo ?: return null
-            val serverAddress = uri.host ?: return null
+            val uuid = uri.userInfo
+            if (uuid.isNullOrEmpty()) {
+                android.util.Log.e("UriParser", "parse: missing UUID")
+                return null
+            }
+            
+            val serverAddress = uri.host
+            if (serverAddress.isNullOrEmpty()) {
+                android.util.Log.e("UriParser", "parse: missing host")
+                return null
+            }
+            
             val port = uri.port.takeIf { it > 0 } ?: 443
             val name = Uri.decode(uri.fragment ?: "VLESS Node")
             
@@ -179,6 +192,8 @@ object UriParser {
      * Supports: plain URIs, base64 encoded, mixed formats
      */
     fun parseMultiple(text: String): List<VlessConfig> {
+        android.util.Log.d("UriParser", "parseMultiple: input length=${text.length}")
+        
         val configs = mutableListOf<VlessConfig>()
         
         // Try base64 decode first
@@ -189,22 +204,29 @@ object UriParser {
                 .replace(" ", "")
             
             if (cleanInput.startsWith("vless://") || cleanInput.startsWith("vmess://")) {
+                android.util.Log.d("UriParser", "Input is plain URIs, not base64")
                 text // Not base64, plain URIs
             } else {
-                String(Base64.decode(cleanInput, Base64.DEFAULT))
+                val decoded = String(Base64.decode(cleanInput, Base64.DEFAULT))
+                android.util.Log.d("UriParser", "Base64 decoded, length=${decoded.length}")
+                decoded
             }
         } catch (e: Exception) {
+            android.util.Log.w("UriParser", "Not base64: ${e.message}")
             text // Not valid base64, use original
         }
         
-        // Split by lines and parse each
-        decodedText.lines()
-            .map { it.trim() }
-            .filter { it.startsWith("vless://") }
-            .forEach { line ->
-                parse(line)?.let { configs.add(it) }
-            }
+        val lines = decodedText.lines()
+        val vlessLines = lines.map { it.trim() }.filter { it.startsWith("vless://") }
+        android.util.Log.d("UriParser", "Total lines: ${lines.size}, VLESS lines: ${vlessLines.size}")
         
+        vlessLines.forEach { line ->
+            val parsed = parse(line)
+            android.util.Log.d("UriParser", "Parsed '${line.take(50)}...' -> ${if (parsed != null) "OK" else "FAILED"}")
+            if (parsed != null) configs.add(parsed)
+        }
+        
+        android.util.Log.i("UriParser", "parseMultiple result: ${configs.size} configs")
         return configs
     }
     

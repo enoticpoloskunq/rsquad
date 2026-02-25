@@ -66,9 +66,11 @@ class NodeRepository(private val context: Context) {
     }
     
     suspend fun addNodes(configs: List<VlessConfig>) {
+        android.util.Log.d("NodeRepository", "addNodes: adding ${configs.size} nodes")
         context.dataStore.edit { prefs ->
             val currentNodes = prefs[nodesKey] ?: "[]"
             val jsonArray = JSONArray(currentNodes)
+            val initialCount = jsonArray.length()
             
             // Add all nodes (no deduplication - user wants all)
             configs.forEach { config ->
@@ -76,6 +78,7 @@ class NodeRepository(private val context: Context) {
             }
             
             prefs[nodesKey] = jsonArray.toString()
+            android.util.Log.i("NodeRepository", "addNodes: $initialCount -> ${jsonArray.length()} nodes saved")
         }
     }
     
