@@ -24,13 +24,24 @@ object XrayWrapper {
     private var coreController: CoreController? = null
     private var isRunning = false
     private var currentConfig: String? = null
+    private var appContext: Context? = null
+    private var isInitialized = false
     
     /**
      * Initialize Xray wrapper with application context
+     * Must be called before any Xray operations
      */
     fun init(context: Context) {
+        if (isInitialized) {
+            LogManager.d(TAG, "Already initialized, skipping")
+            return
+        }
+        
         LogManager.i(TAG, "=== XrayWrapper.init() START ===")
         LogManager.flush()
+        
+        // Save context for later use
+        appContext = context.applicationContext
         
         try {
             // IMPORTANT: Set context for Go mobile bindings
@@ -64,12 +75,42 @@ object XrayWrapper {
             LogManager.i(TAG, "=== XrayWrapper.init() SUCCESS ===")
             LogManager.flush()
             
+            isInitialized = true
+            
         } catch (e: Throwable) {
             LogManager.e(TAG, "=== XrayWrapper.init() FAILED ===", e)
             LogManager.flush()
             throw e
         }
     }
+    
+    /**
+     * Ensure Xray is initialized before operations
+     * Uses saved context from previous init() call
+     */
+    private fun ensureInitialized(): Boolean {
+        if (isInitialized) return true
+        
+        val ctx = appContext
+        if (ctx != null) {
+            LogManager.w(TAG, "Xray not initialized, initializing with saved context...")
+            try {
+                init(ctx)
+                return isInitialized
+            } catch (e: Exception) {
+                LogManager.e(TAG, "Failed to initialize Xray", e)
+                return false
+            }
+        }
+        
+        LogManager.e(TAG, "Xray not initialized and no context saved! Call init(context) first.")
+        return false
+    }
+    
+    /**
+     * Check if Xray is initialized
+     */
+    fun isInitialized(): Boolean = isInitialized
     
     /**
      * Copy geoip.dat and geosite.dat from assets to files directory
@@ -438,6 +479,12 @@ object XrayWrapper {
      * @return Delay in milliseconds, or -1 on error
      */
     fun measureDelay(configJson: String, url: String = "https://www.google.com/generate_204"): Long {
+        // Ensure Xray is initialized (sets xray.location.asset env var)
+        if (!ensureInitialized()) {
+            LogManager.e(TAG, "measureDelay() aborted: Xray not initialized")
+            return -1L
+        }
+        
         return try {
             LogManager.d(TAG, "measureDelay() starting...")
             val startTime = System.currentTimeMillis()
@@ -459,11 +506,135 @@ object XrayWrapper {
 
     /**
      * Test a VlessConfig by measuring delay
-     * Generates config JSON internally
+     * Generates config JSON internally (uses simplified test config)
      */
     fun testConfig(config: VlessConfig, url: String = "https://www.google.com/generate_204"): Long {
-        val configJson = generateConfig(config)
+        val configJson = generateTestConfig(config)
         return measureDelay(configJson, url)
+    }
+    
+    /**
+     * Generate simplified Xray config for node testing
+     * NO geoip/geosite rules - just direct proxy connection
+     * This avoids the geoip.dat/geosite.dat file requirement
+     */
+    fun generateTestConfig(config: VlessConfig): String {
+        LogManager.d(TAG, "generateTestConfig() for ${config.name}")
+        
+        val json = JSONObject()
+        
+        // Minimal log settings
+        json.put("log", JSONObject().apply {
+            put("loglevel", "warning")
+        })
+        
+        // Simple DNS
+        json.put("dns", JSONObject().apply {
+            put("servers", JSONArray().apply {
+                put("8.8.8.8")
+                put("1.1.1.1")
+            })
+            put("queryStrategy", "UseIPv4")
+        })
+        
+        // Minimal inbounds - just SOCKS5 for testing
+        val inbounds = JSONArray()
+        inbounds.put(JSONObject().apply {
+            put("tag", "socks-in")
+            put("port", 10808)
+            put("listen", "127.0.0.1")
+            put("protocol", "socks")
+            put("settings", JSONObject().apply {
+                put("udp", false)
+                put("auth", "noauth")
+            })
+        })
+        json.put("inbounds", inbounds)
+        
+        // Outbounds
+        val outbounds = JSONArray()
+        
+        // VLESS proxy outbound
+        outbounds.put(JSONObject().apply {
+            put("tag", "proxy")
+            put("protocol", "vless")
+            put("settings", JSONObject().apply {
+                put("vnext", JSONArray().put(JSONObject().apply {
+                    put("address", config.serverAddress)
+                    put("port", config.port)
+                    put("users", JSONArray().put(JSONObject().apply {
+                        put("id", config.uuid)
+                        put("encryption", "none")
+                        if (config.flow != FlowMode.NONE) {
+                            put("flow", when(config.flow) {
+                                FlowMode.XTLS_RPRX_VISION -> "xtls-rprx-vision"
+                                FlowMode.XTLS_RPRX_VISION_UDP443 -> "xtls-rprx-vision-udp443"
+                                else -> ""
+                            })
+                        }
+                    }))
+                }))
+            })
+            put("streamSettings", JSONObject().apply {
+                put("network", "tcp")
+                put("security", when(config.securityMode) {
+                    SecurityMode.REALITY -> "reality"
+                    SecurityMode.TLS -> "tls"
+                    SecurityMode.NONE -> "none"
+                })
+                
+                if (config.securityMode == SecurityMode.REALITY) {
+                    put("realitySettings", JSONObject().apply {
+                        put("show", false)
+                        put("fingerprint", config.fingerprint.ifEmpty { "chrome" })
+                        if (config.sni.isNotEmpty()) put("serverName", config.sni)
+                        if (config.realityPublicKey.isNotEmpty()) put("publicKey", config.realityPublicKey)
+                        if (config.realityShortId.isNotEmpty()) put("shortId", config.realityShortId)
+                        if (config.realitySpiderX.isNotEmpty()) put("spiderX", config.realitySpiderX)
+                    })
+                } else if (config.securityMode == SecurityMode.TLS) {
+                    put("tlsSettings", JSONObject().apply {
+                        put("allowInsecure", false)
+                        if (config.sni.isNotEmpty()) put("serverName", config.sni)
+                        put("fingerprint", config.fingerprint.ifEmpty { "chrome" })
+                    })
+                }
+                
+                // Socket options
+                put("sockopt", JSONObject().apply {
+                    if (config.tcpFastOpen) put("tcpFastOpen", true)
+                    if (config.tcpNoDelay) put("tcpNoDelay", true)
+                    if (config.tcpKeepAliveInterval > 0) put("tcpKeepAliveInterval", config.tcpKeepAliveInterval)
+                })
+            })
+        })
+        
+        // Direct outbound for fallback
+        outbounds.put(JSONObject().apply {
+            put("tag", "direct")
+            put("protocol", "freedom")
+        })
+        
+        json.put("outbounds", outbounds)
+        
+        // SIMPLIFIED ROUTING - no geoip/geosite!
+        // Just route everything through proxy
+        json.put("routing", JSONObject().apply {
+            put("domainStrategy", "AsIs")
+            put("rules", JSONArray().apply {
+                // Everything goes through proxy
+                put(JSONObject().apply {
+                    put("type", "field")
+                    put("network", "tcp")
+                    put("outboundTag", "proxy")
+                })
+            })
+        })
+        
+        val configStr = json.toString(2)
+        LogManager.d(TAG, "Test config generated (${configStr.length} bytes)")
+        
+        return configStr
     }
 }
 

@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.SharedPreferences
 import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.core.compat.RomCompat
+import com.raccoonsquad.core.xray.XrayWrapper
 
 class App : Application() {
     
@@ -42,6 +43,13 @@ class App : Application() {
         }
         
         RomCompat.applyProcessOptimizations()
+        
+        // Initialize Xray core (loads geoip.dat, geosite.dat)
+        try {
+            XrayWrapper.init(this)
+        } catch (e: Exception) {
+            LogManager.e("App", "Failed to initialize Xray", e)
+        }
         
         LogManager.i("App", "Initialization complete")
         LogManager.flush()
