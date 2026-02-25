@@ -108,6 +108,8 @@ class RaccoonVpnService : VpnService() {
         
         if (isSwitching) {
             LogManager.i(TAG, "Switching to new config (keeping VPN interface)...")
+            // Reset traffic stats when switching nodes
+            TrafficStats.reset()
             try {
                 XrayWrapper.stop()
                 Thread.sleep(100) // Wait for Xray to stop

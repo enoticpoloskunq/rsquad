@@ -100,6 +100,20 @@ object TrafficStats {
         LogManager.i(TAG, "Stopped tracking. Total: ↓${formatBytes(totalRx.get())} ↑${formatBytes(totalTx.get())}")
     }
     
+    /**
+     * Reset counters when switching nodes
+     */
+    fun reset() {
+        totalRx.set(0)
+        totalTx.set(0)
+        currentRxSpeed.set(0)
+        currentTxSpeed.set(0)
+        lastRxBytes = getRxBytes?.invoke() ?: 0
+        lastTxBytes = getTxBytes?.invoke() ?: 0
+        lastUpdateTime = System.currentTimeMillis()
+        LogManager.i(TAG, "Traffic stats reset")
+    }
+    
     fun addListener(listener: (rxSpeed: Long, txSpeed: Long, totalRx: Long, totalTx: Long) -> Unit) {
         listeners.add(listener)
     }

@@ -3,6 +3,9 @@ package com.raccoonsquad.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,7 +18,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -172,14 +177,21 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = { 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        Text(
+                            text = if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad",
+                            maxLines = 1
+                        )
                         if (uiStates.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                "(${uiStates.size})",
+                                text = "(${uiStates.size})",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
                             )
                         }
                     }
@@ -853,6 +865,30 @@ fun NodeCard(
     onTest: () -> Unit,
     onFavorite: () -> Unit
 ) {
+    // Animate background color when active state changes
+    val backgroundColor by animateColorAsState(
+        targetValue = if (node.isActive) 
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        else 
+            MaterialTheme.colorScheme.surface,
+        animationSpec = tween(300),
+        label = "bgColor"
+    )
+    
+    // Animate elevation when active
+    val elevation by animateDpAsState(
+        targetValue = if (node.isActive) 4.dp else 1.dp,
+        animationSpec = tween(300),
+        label = "elevation"
+    )
+    
+    // Animate scale for active node
+    val scale by animateDpAsState(
+        targetValue = if (node.isActive) 0.dp else 0.dp,
+        animationSpec = tween(150),
+        label = "scale"
+    )
+    
     // Stable colors calculated once
     val latencyColor = when {
         node.latency == null -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -861,19 +897,13 @@ fun NodeCard(
         else -> Color(0xFFF44336)
     }
     
-    // Fixed height for predictable layout (faster recomposition)
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(64.dp)
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = if (node.isActive) 
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            else 
-                MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (node.isActive) 2.dp else 0.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         shape = MaterialTheme.shapes.small
     ) {
         Row(
@@ -886,9 +916,13 @@ fun NodeCard(
             Column(modifier = Modifier.weight(1f)) {
                 // Line 1: Status + Name + Ping
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Animated status indicator
                     Text(
                         text = if (node.isActive) "🟢" else "⚪",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.graphicsLayer {
+                            alpha = if (node.isActive) 1f else 0.6f
+                        }
                     )
                     if (node.isFavorite) {
                         Text(" ⭐", style = MaterialTheme.typography.bodyMedium)
@@ -901,14 +935,15 @@ fun NodeCard(
                         modifier = Modifier.weight(1f),
                         fontWeight = if (node.isActive) FontWeight.Bold else FontWeight.Normal
                     )
-                    // Ping
-                    node.latency?.let { latency ->
-                        Text(
-                            text = if (latency > 0) " $latency ms" else " ✗",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = latencyColor
-                        )
-                    }
+                    // Ping - always show placeholder or value
+                    Text(
+                        text = node.latency?.let { latency ->
+                            if (latency > 0) "$latency ms" else "✗"
+                        } ?: "—",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (node.latency != null && node.latency > 0) latencyColor 
+                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
                 }
                 
                 // Line 2: Server address
@@ -920,7 +955,7 @@ fun NodeCard(
                 )
             }
             
-            // Connect/Disconnect button
+            // Connect/Disconnect button with animation
             Box(
                 modifier = Modifier
                     .padding(start = 8.dp)
