@@ -554,7 +554,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         testJob = viewModelScope.launch {
             val maxAttempts = 20
             var currentConfig = config
-            
+
             for (attempt in 1..maxAttempts) {
                 // Check if cancelled
                 if (!isActive) {
@@ -590,6 +590,16 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             
             _bruteForceState.value = BruteForceState.Failed(maxAttempts)
             testJob = null
+        }
+    }
+    
+    /**
+     * Start brute force for current active node
+     */
+    fun bruteForceActiveNode(onReconnectNeeded: (VlessConfig) -> Unit) {
+        val activeConfig = nodes.value.find { it.id == activeNodeId.value }
+        if (activeConfig != null) {
+            bruteForceCosmetics(activeConfig, onReconnectNeeded)
         }
     }
     

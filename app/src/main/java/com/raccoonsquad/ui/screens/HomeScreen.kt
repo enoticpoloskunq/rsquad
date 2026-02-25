@@ -422,18 +422,14 @@ fun HomeScreen(
                 showTestDialog = false  // Auto-close
             },
             onBruteForce = {
-                // Get active config at callback time
-                val activeConfig = nodes.value.find { it.id == activeId }
-                activeConfig?.let { config ->
-                    viewModel.bruteForceCosmetics(config) { updatedConfig ->
-                        // Reconnect VPN with new config
-                        VpnController.stopVpn(context)
-                        viewModel.setActiveNode(null)
-                        GlobalScope.launch {
-                            kotlinx.coroutines.delay(500)
-                            VpnController.startVpn(context, updatedConfig)
-                            viewModel.setActiveNode(updatedConfig.id)
-                        }
+                viewModel.bruteForceActiveNode { updatedConfig ->
+                    // Reconnect VPN with new config
+                    VpnController.stopVpn(context)
+                    viewModel.setActiveNode(null)
+                    GlobalScope.launch {
+                        kotlinx.coroutines.delay(500)
+                        VpnController.startVpn(context, updatedConfig)
+                        viewModel.setActiveNode(updatedConfig.id)
                     }
                 }
             },
