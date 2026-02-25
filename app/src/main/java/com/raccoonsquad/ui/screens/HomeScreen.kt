@@ -289,11 +289,10 @@ fun HomeScreen(
                         isCheckingIp = true
                         GlobalScope.launch(Dispatchers.IO) {
                             try {
-                                // Use SOCKS5 proxy provided by Xray (127.0.0.1:10808)
-                                // This ensures the request goes through VPN tunnel
+                                // Use HTTP proxy provided by Xray (127.0.0.1:10809) - more reliable than SOCKS5
                                 val proxy = java.net.Proxy(
-                                    java.net.Proxy.Type.SOCKS,
-                                    java.net.InetSocketAddress("127.0.0.1", 10808)
+                                    java.net.Proxy.Type.HTTP,
+                                    java.net.InetSocketAddress("127.0.0.1", 10809)
                                 )
                                 
                                 val client = okhttp3.OkHttpClient.Builder()

@@ -88,11 +88,19 @@ object Doctor {
         checks.add(vpnCheck)
         LogManager.i(TAG, "VPN: ${if (vpnCheck.success) "OK" else "FAIL"}")
         
-        // Check 4: URL through VPN (if active) - simplified
+        // Check 4: URL through VPN (if active)
         if (isVpnActive) {
-            // Just check if VPN service is running - actual URL test through SOCKS5 is unreliable
-            checks.add(CheckResult(CheckType.URL_THROUGH_VPN, true, "VPN активен"))
-            LogManager.i(TAG, "URL: OK (VPN active)")
+            val urlCheck = checkUrlThroughVpn()
+            checks.add(urlCheck)
+            LogManager.i(TAG, "URL: ${if (urlCheck.success) "OK" else "FAIL"}")
+            
+            if (!urlCheck.success) {
+                return@withContext DiagnosisResult(
+                    checks = checks,
+                    overallSuccess = false,
+                    recommendation = "VPN подключён, но трафик не проходит. Попробуйте другую ноду."
+                )
+            }
         }
         
         val overallSuccess = checks.all { it.success }

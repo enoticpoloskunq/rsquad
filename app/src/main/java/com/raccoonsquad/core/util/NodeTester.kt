@@ -104,30 +104,30 @@ object NodeTester {
     }
     
     /**
-     * Test through active VPN connection (via SOCKS5 proxy)
+     * Test through active VPN connection (via HTTP proxy)
      * Uses the existing VPN tunnel - no need to start new connection
      */
     fun testThroughActiveProxy(): TestResult {
         return try {
             val startTime = System.currentTimeMillis()
-            
-            // Use SOCKS5 proxy provided by Xray (127.0.0.1:10808)
+
+            // Use HTTP proxy provided by Xray (127.0.0.1:10809) - more reliable than SOCKS5
             val proxy = java.net.Proxy(
-                java.net.Proxy.Type.SOCKS,
-                InetSocketAddress("127.0.0.1", 10808)
+                java.net.Proxy.Type.HTTP,
+                InetSocketAddress("127.0.0.1", 10809)
             )
-            
+
             val client = OkHttpClient.Builder()
                 .proxy(proxy)
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
-            
+
             val request = Request.Builder()
-                .url("https://www.google.com/generate_204")
+                .url("http://www.google.com/generate_204")  // HTTP works better through proxy
                 .get()
                 .build()
-            
+
             client.newCall(request).execute().use { response ->
                 val latency = System.currentTimeMillis() - startTime
                 if (response.isSuccessful || response.code == 204) {
