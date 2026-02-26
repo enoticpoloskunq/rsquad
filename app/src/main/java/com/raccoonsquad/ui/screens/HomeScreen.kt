@@ -318,7 +318,18 @@ fun HomeScreen(
                                     text = { Text("💾 Экспорт нод") },
                                     onClick = {
                                         showMainMenu = false
-                                        // TODO: Export
+                                        val exportedText = viewModel.exportNodes()
+                                        val count = viewModel.getExportCount()
+                                        if (count > 0) {
+                                            clipboardManager.setText(AnnotatedString(exportedText))
+                                            viewModelScope.launch {
+                                                snackbarHostState.showSnackbar("✅ Экспортировано $count нод в буфер")
+                                            }
+                                        } else {
+                                            viewModelScope.launch {
+                                                snackbarHostState.showSnackbar("❌ Нет нод для экспорта")
+                                            }
+                                        }
                                     }
                                 )
                             }

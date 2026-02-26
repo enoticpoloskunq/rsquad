@@ -464,6 +464,21 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
+    /**
+     * Export all nodes as VLESS URIs (one per line)
+     */
+    fun exportNodes(): String {
+        val allNodes = nodes.value
+        return allNodes.joinToString("\n") { config ->
+            com.raccoonsquad.data.parser.UriParser.generateUri(config)
+        }
+    }
+    
+    /**
+     * Export nodes count
+     */
+    fun getExportCount(): Int = nodes.value.size
+    
     fun setActiveNode(id: String?) {
         viewModelScope.launch {
             repository.setActiveNode(id)
