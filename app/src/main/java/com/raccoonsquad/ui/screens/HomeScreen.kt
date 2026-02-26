@@ -39,8 +39,12 @@ import com.raccoonsquad.core.diagnosis.Doctor
 import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.settings.SettingsManager
+import com.raccoonsquad.data.groups.GroupManager
+import com.raccoonsquad.data.groups.GroupColor
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
+import com.raccoonsquad.ui.components.AnimatedConnectionWidget
+import com.raccoonsquad.ui.components.GroupsBottomSheet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
@@ -114,7 +118,18 @@ fun HomeScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var editingConfig by remember { mutableStateOf<VlessConfig?>(null) }  // Node being edited
     var showDeleteSelectedDialog by remember { mutableStateOf(false) }  // Confirm delete selected
-    
+    var showGroupsSheet by remember { mutableStateOf(false) }  // Groups bottom sheet
+
+    // Traffic stats state
+    var downloadSpeed by remember { mutableStateOf("0 B/s") }
+    var uploadSpeed by remember { mutableStateOf("0 B/s") }
+    var totalDownload by remember { mutableStateOf("0 B") }
+    var totalUpload by remember { mutableStateOf("0 B") }
+
+    // Groups state
+    val groups by GroupManager.groups.collectAsState()
+    val selectedGroupId by GroupManager.selectedGroupId.collectAsState()
+
     // Selection mode state
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -135,7 +150,38 @@ fun HomeScreen(
             hasLoadedNodes = true
         }
     }
-    
+
+    // Track traffic stats when VPN is active
+    LaunchedEffect(activeId) {
+        if (activeId != null) {
+            val listener: (Long, Long, Long, Long) -> Unit = { rxSpeed, txSpeed, totalRx, totalTx ->
+                downloadSpeed = TrafficStats.formatSpeed(rxSpeed)
+                uploadSpeed = TrafficStats.formatSpeed(txSpeed)
+                totalDownload = TrafficStats.formatBytes(totalRx)
+                totalUpload = TrafficStats.formatBytes(totalTx)
+            }
+            TrafficStats.addListener(listener)
+
+            // Update immediately
+            downloadSpeed = TrafficStats.downloadSpeedFormatted
+            uploadSpeed = TrafficStats.uploadSpeedFormatted
+            totalDownload = TrafficStats.totalDownloadedFormatted
+            totalUpload = TrafficStats.totalUploadedFormatted
+
+            // Wait until VPN is disconnected
+            try {
+                while (activeId != null) {
+                    delay(500)
+                }
+            } finally {
+                TrafficStats.removeListener(listener)
+            }
+        } else {
+            downloadSpeed = "0 B/s"
+            uploadSpeed = "0 B/s"
+        }
+    }
+
     // Use all nodes directly - Compose handles large lists efficiently with LazyColumn
     val visibleNodeCount = nodes.size
     
@@ -357,7 +403,16 @@ fun HomeScreen(
                                         showTestDialog = true
                                     }
                                 )
-                                
+
+                                // Groups
+                                DropdownMenuItem(
+                                    text = { Text("📁 Группы") },
+                                    onClick = {
+                                        showMainMenu = false
+                                        showGroupsSheet = true
+                                    }
+                                )
+
                                 // Clean sub-menu
                                 DropdownMenuItem(
                                     text = { Text("🗑️ Очистка ▸") },
@@ -437,14 +492,16 @@ fun HomeScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-            
-            VpnStatusBanner(
+
+            // Animated connection widget with pulsing effect and traffic stats
+            AnimatedConnectionWidget(
                 isActive = isVpnActive,
                 activeNode = activeNode,
-                nodeCount = uiStates.size,
-                exitIp = exitIp,
-                exitCountry = exitCountry,
-                isCheckingIp = isCheckingIp,
+                isConnecting = false,
+                downloadSpeed = downloadSpeed,
+                uploadSpeed = uploadSpeed,
+                totalDownload = totalDownload,
+                totalUpload = totalUpload,
                 onConnect = {
                     if (uiStates.isNotEmpty()) {
                         // Pre-flight check: select best node with URL test verification
@@ -452,10 +509,10 @@ fun HomeScreen(
                             val bestNode = selectBestNodeWithPreflight(uiStates)
                             if (bestNode != null) {
                                 connectVpn(activity, bestNode.config, viewModel)
-                                
+
                                 // Post-connect verification after 3 seconds
                                 delay(3000)
-                                
+
                                 if (RaccoonVpnService.isActive) {
                                     val trafficOk = verifyVpnTraffic()
                                     if (!trafficOk) {
@@ -474,63 +531,81 @@ fun HomeScreen(
                     exitIp = null
                     exitCountry = null
                 },
-                onCheckIp = {
-                    if (isVpnActive && !isCheckingIp) {
-                        isCheckingIp = true
-                        GlobalScope.launch(Dispatchers.IO) {
-                            try {
-                                // Use HTTP proxy provided by Xray (127.0.0.1:10809) - more reliable than SOCKS5
-                                val proxy = java.net.Proxy(
-                                    java.net.Proxy.Type.HTTP,
-                                    java.net.InetSocketAddress("127.0.0.1", 10809)
-                                )
-                                
-                                val client = okhttp3.OkHttpClient.Builder()
-                                    .proxy(proxy)
-                                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                                    .build()
-                                
-                                // Use ip-api.com - returns both IP and country in one request
-                                val request = okhttp3.Request.Builder()
-                                    .url("http://ip-api.com/json/")
-                                    .get()
-                                    .build()
-                                
-                                val response = client.newCall(request).execute()
-                                val body = response.body?.string()
-                                
-                                if (body != null) {
-                                    val json = org.json.JSONObject(body)
-                                    val ip = json.optString("query", "unknown")
-                                    val country = json.optString("country", "")
-                                    val city = json.optString("city", "")
-                                    val isp = json.optString("isp", "")
-                                    
-                                    withContext(Dispatchers.Main) {
-                                        exitIp = ip
-                                        exitCountry = if (country.isNotEmpty()) "$country ($city)" else null
-                                        isCheckingIp = false
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+
+            // IP info row (shown when connected)
+            if (isVpnActive) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🌍", style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (exitIp != null) "$exitIp ${exitCountry ?: ""}" else "Нажмите для проверки IP",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            if (!isCheckingIp) {
+                                isCheckingIp = true
+                                GlobalScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val proxy = java.net.Proxy(
+                                            java.net.Proxy.Type.HTTP,
+                                            java.net.InetSocketAddress("127.0.0.1", 10809)
+                                        )
+                                        val client = okhttp3.OkHttpClient.Builder()
+                                            .proxy(proxy)
+                                            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                                            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                                            .build()
+                                        val request = okhttp3.Request.Builder()
+                                            .url("http://ip-api.com/json/")
+                                            .get()
+                                            .build()
+                                        val response = client.newCall(request).execute()
+                                        val body = response.body?.string()
+                                        if (body != null) {
+                                            val json = org.json.JSONObject(body)
+                                            val ip = json.optString("query", "unknown")
+                                            val country = json.optString("country", "")
+                                            val city = json.optString("city", "")
+                                            withContext(Dispatchers.Main) {
+                                                exitIp = ip
+                                                exitCountry = if (country.isNotEmpty()) "$country ($city)" else null
+                                                isCheckingIp = false
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        withContext(Dispatchers.Main) {
+                                            exitIp = "Error"
+                                            isCheckingIp = false
+                                        }
                                     }
-                                } else {
-                                    withContext(Dispatchers.Main) {
-                                        exitIp = "No response"
-                                        exitCountry = null
-                                        isCheckingIp = false
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    exitIp = "Error: ${e.message?.take(30)}"
-                                    exitCountry = null
-                                    isCheckingIp = false
                                 }
                             }
                         }
+                    ) {
+                        if (isCheckingIp) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Проверить IP", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
-            )
-            
+            }
+
             if (uiStates.isEmpty()) {
                 EmptyState(modifier = Modifier.fillMaxSize())
             } else {
@@ -801,13 +876,33 @@ fun HomeScreen(
                     }
                 }
             },
-            onDismiss = { 
+            onDismiss = {
                 showDoctorDialog = false
                 viewModel.resetBruteForceState()
             }
         )
     }
-    
+
+    // Groups Bottom Sheet
+    if (showGroupsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showGroupsSheet = false }
+        ) {
+            GroupsBottomSheet(
+                onDismiss = { showGroupsSheet = false },
+                onCreateGroup = { name, color, icon ->
+                    GroupManager.createGroup(name, color, icon)
+                },
+                onSelectGroup = { groupId ->
+                    GroupManager.selectGroup(groupId)
+                },
+                onDeleteGroup = { groupId ->
+                    GroupManager.deleteGroup(groupId)
+                }
+            )
+        }
+    }
+
     // Node Editor Screen (full screen overlay)
     if (editingConfig != null) {
         NodeEditorScreen(
@@ -941,189 +1036,6 @@ fun onVpnPermissionResult(granted: Boolean, context: android.content.Context) {
         VpnController.onPermissionGranted(context)
     } else {
         VpnController.clear()
-    }
-}
-
-@Composable
-fun VpnStatusBanner(
-    isActive: Boolean,
-    activeNode: NodeUiState?,
-    nodeCount: Int,
-    exitIp: String?,
-    exitCountry: String?,
-    isCheckingIp: Boolean,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
-    onCheckIp: () -> Unit
-) {
-    // Read traffic stats directly to avoid parent recomposition
-    var trafficText by remember { mutableStateOf("") }
-    
-    DisposableEffect(isActive) {
-        if (isActive) {
-            val listener: (Long, Long, Long, Long) -> Unit = { rx, tx, _, _ ->
-                trafficText = "↓ ${TrafficStats.formatSpeed(rx)}  ↑ ${TrafficStats.formatSpeed(tx)}"
-            }
-            TrafficStats.addListener(listener)
-            onDispose { TrafficStats.removeListener(listener) }
-        } else {
-            trafficText = ""
-            onDispose { }
-        }
-    }
-    
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) 
-                MaterialTheme.colorScheme.primaryContainer
-            else 
-                MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .background(
-                                color = if (isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
-                                shape = MaterialTheme.shapes.small
-                            )
-                    )
-                    Text(
-                        if (isActive) "VPN Connected" else "VPN Disconnected",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-                Text(
-                    activeNode?.name ?: if (nodeCount > 0) "$nodeCount nodes available" else "No nodes",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                
-                // Show exit IP if available
-                if (isActive && exitIp != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Public,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            exitIp,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (exitCountry != null) {
-                            Text(
-                                "• $exitCountry",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-                
-                // Show traffic stats when connected
-                if (isActive && trafficText.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.SwapVert,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            trafficText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-            
-            if (isActive) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onCheckIp,
-                        enabled = !isCheckingIp,
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        if (isCheckingIp) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.Public,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Check IP")
-                        }
-                    }
-                    Button(
-                        onClick = onDisconnect,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Stop,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Stop")
-                    }
-                }
-            } else if (nodeCount > 0) {
-                Button(
-                    onClick = onConnect,
-                    modifier = Modifier.height(44.dp)
-                ) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Connect", fontWeight = FontWeight.Medium)
-                }
-            }
-        }
     }
 }
 
