@@ -12,6 +12,9 @@ permissions:
   contents: write
   packages: write
 
+env:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.configuration-cache=true"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,28 +28,22 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    # Gradle Build Action with built-in caching
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 9.3.1
+        cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+        gradle-home-cache-cleanup: true
 
-    - name: Cache Gradle packages
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-          ~/.android/build-cache
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-
+    # Cache libv2ray.aar (~50MB download)
     - name: Cache libv2ray.aar
       id: cache-libv2ray
       uses: actions/cache@v4
       with:
         path: app/libs/libv2ray.aar
-        key: libv2ray-aar-latest
+        key: libv2ray-aar-${{ hashFiles('app/libs/classes.jar') }}
+        restore-keys: libv2ray-aar-
 
     - name: Create libs directory
       run: mkdir -p app/libs
@@ -56,9 +53,10 @@ jobs:
       run: |
         curl -L -o app/libs/libv2ray.aar \
           "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
+        echo "Downloaded $(ls -lh app/libs/libv2ray.aar | awk '{print $5}')"
 
     - name: Build Debug APKs
-      run: gradle assembleDebug --no-daemon
+      run: gradle assembleDebug --no-daemon --build-cache
 
     - name: Upload arm64-v8a Debug APK
       uses: actions/upload-artifact@v4
@@ -73,7 +71,7 @@ jobs:
         path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
 
     - name: Build Release APKs
-      run: gradle assembleRelease --no-daemon
+      run: gradle assembleRelease --no-daemon --build-cache
 
     - name: Upload arm64-v8a Release APK
       uses: actions/upload-artifact@v4
