@@ -1,34 +1,25 @@
-# GitLab CI/CD for Raccoon Squad VPN
-image: openjdk:17-jdk
-
 stages:
   - build
 
-before_script:
-  - apt-get update -qq && apt-get install -y wget unzip
-  - mkdir -p android-sdk/cmdline-tools
-  - export ANDROID_HOME=$PWD/android-sdk
-  - export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-  - wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O android-sdk.zip
-  - unzip -q android-sdk.zip -d android-sdk/cmdline-tools
-  - mv android-sdk/cmdline-tools/cmdline-tools android-sdk/cmdline-tools/latest
-  - yes | sdkmanager --licenses || true
-  - yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
-  - chmod +x ./gradlew
-
-build_apk:
+build:
   stage: build
-  only:
-    - main
-    - master
-    - tags
+  image: openjdk:17-jdk-slim
   script:
+    - echo "Building APK"
+    - apt-get update && apt-get install -y wget unzip
     - mkdir -p app/libs
+    - wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmd.zip
+    - mkdir -p android-sdk/cmdline-tools
+    - unzip -q cmd.zip -d android-sdk/cmdline-tools
+    - mv android-sdk/cmdline-tools/cmdline-tools android-sdk/cmdline-tools/latest
+    - export ANDROID_HOME=$PWD/android-sdk
+    - export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+    - yes | sdkmanager --licenses
+    - yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
     - curl -L -o app/libs/libv2ray.aar "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
-    - ./gradlew assembleDebug assembleRelease --no-daemon
+    - chmod +x gradlew
+    - ./gradlew assembleDebug --no-daemon
   artifacts:
-    name: "raccoon-squad-$CI_COMMIT_SHORT_SHA"
     paths:
       - app/build/outputs/apk/debug/*.apk
-      - app/build/outputs/apk/release/*.apk
-    expire_in: 1 month
+    expire_in: 1 week
