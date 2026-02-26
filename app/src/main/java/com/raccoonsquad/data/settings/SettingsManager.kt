@@ -21,6 +21,8 @@ class SettingsManager(private val context: Context) {
         private val SUCCESSFUL_CONNECTIONS = intPreferencesKey("successful_connections")
         private val RATING_SHOWN = booleanPreferencesKey("rating_shown")
         private val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
+        private val KILL_SWITCH = booleanPreferencesKey("kill_switch")
+        private val AUTO_RECONNECT = booleanPreferencesKey("auto_reconnect")
 
         const val RATING_THRESHOLD = 5  // Show rating after 5 successful connections
     }
@@ -95,6 +97,30 @@ class SettingsManager(private val context: Context) {
     suspend fun setDeveloperMode(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[DEVELOPER_MODE] = enabled
+        }
+    }
+
+    // Kill Switch - block internet when VPN disconnects unexpectedly
+    val killSwitch: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[KILL_SWITCH] ?: false
+        }
+
+    suspend fun setKillSwitch(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KILL_SWITCH] = enabled
+        }
+    }
+
+    // Auto-reconnect - automatically reconnect on connection drop
+    val autoReconnect: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[AUTO_RECONNECT] ?: true  // Enabled by default
+        }
+
+    suspend fun setAutoReconnect(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTO_RECONNECT] = enabled
         }
     }
 }

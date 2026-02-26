@@ -14,9 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.raccoonsquad.data.settings.SettingsManager
 import com.raccoonsquad.ui.theme.*
+import com.raccoonsquad.core.update.UpdateChecker
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,9 +30,15 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val currentTheme by settingsManager.theme.collectAsState(initial = AppTheme.PURPLE)
     val developerMode by settingsManager.developerMode.collectAsState(initial = false)
+    val killSwitch by settingsManager.killSwitch.collectAsState(initial = false)
+    val autoReconnect by settingsManager.autoReconnect.collectAsState(initial = true)
 
     var showThemeDialog by remember { mutableStateOf(false) }
     var showDevOptions by remember { mutableStateOf(false) }  // Hidden dev mode unlock
+    var isCheckingUpdates by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<com.raccoonsquad.core.update.UpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     
     Scaffold(
         topBar = {
@@ -106,6 +114,94 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // VPN section
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "VPN",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Kill Switch
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Security,
+                                    "Kill Switch",
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                Column {
+                                    Text("Kill Switch", style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        "Блокировать интернет при отключении VPN",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        Switch(
+                            checked = killSwitch,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    settingsManager.setKillSwitch(enabled)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Auto-reconnect
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    "Auto-reconnect",
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                Column {
+                                    Text("Авто-переподключение", style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        "Переподключаться при разрыве связи",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        Switch(
+                            checked = autoReconnect,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    settingsManager.setAutoReconnect(enabled)
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -206,14 +302,90 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "Версия: 1.1.0",
+                            "Версия: 1.2.0",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    isCheckingUpdates = true
+                                    val result = com.raccoonsquad.core.update.UpdateChecker.checkForUpdates()
+                                    isCheckingUpdates = false
+                                    result.onSuccess { info ->
+                                        updateInfo = info
+                                        showUpdateDialog = true
+                                    }.onFailure { e ->
+                                        // Show error snackbar
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isCheckingUpdates
+                        ) {
+                            if (isCheckingUpdates) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.SystemUpdate, contentDescription = null)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (isCheckingUpdates) "Проверка..." else "Проверить обновления")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Update dialog
+    if (showUpdateDialog && updateInfo != null) {
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            title = { 
+                Text(if (updateInfo!!.isUpdateAvailable) "🆕 Доступно обновление" else "✅ Актуальная версия")
+            },
+            text = {
+                Column {
+                    Text("Текущая версия: ${updateInfo!!.currentVersion}")
+                    Text("Последняя версия: ${updateInfo!!.latestVersion}")
+                    if (updateInfo!!.isUpdateAvailable) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Изменения:",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Text(
+                            updateInfo!!.changelog.take(300) + if (updateInfo!!.changelog.length > 300) "..." else "",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
+            },
+            confirmButton = {
+                if (updateInfo!!.isUpdateAvailable) {
+                    Button(onClick = {
+                        com.raccoonsquad.core.update.UpdateChecker.openDownloadPage(context, updateInfo!!.downloadUrl)
+                        showUpdateDialog = false
+                    }) {
+                        Text("Скачать")
+                    }
+                } else {
+                    TextButton(onClick = { showUpdateDialog = false }) {
+                        Text("OK")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = false }) {
+                    Text("Закрыть")
+                }
             }
-        }
+        )
     }
     
     // Theme selection dialog
