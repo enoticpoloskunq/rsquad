@@ -100,11 +100,13 @@ fun HomeScreen(
     val testResult by viewModel.testResult.collectAsState()
     
     var showImportDialog by remember { mutableStateOf(false) }
-    var showClearDialog by remember { mutableStateOf(false) }
     var showTestDialog by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var showCosmeticDialog by remember { mutableStateOf(false) }
     var showDoctorDialog by remember { mutableStateOf(false) }
+    var showMainMenu by remember { mutableStateOf(false) }  // Overflow menu
+    var showCleanMenu by remember { mutableStateOf(false) }  // Clean sub-menu
+    var showClearDialog by remember { mutableStateOf(false) }
     
     var sortOrder by remember { mutableStateOf(SortOrder.FAVORITES_FIRST) }
     
@@ -208,6 +210,7 @@ fun HomeScreen(
                 },
                 actions = {
                     if (uiStates.isNotEmpty()) {
+                        // Sort menu
                         Box {
                             IconButton(onClick = { showSortMenu = true }) {
                                 Icon(Icons.Default.Sort, "Sort")
@@ -254,21 +257,71 @@ fun HomeScreen(
                             }
                         }
                     }
+                    
+                    // Import button
                     IconButton(onClick = { showImportDialog = true }) {
                         Icon(Icons.Default.Add, "Import")
                     }
+                    
+                    // Main menu (overflow)
                     if (uiStates.isNotEmpty()) {
-                        IconButton(onClick = { showCosmeticDialog = true }) {
-                            Icon(Icons.Default.AutoFixHigh, "Cosmetics")
-                        }
-                        IconButton(onClick = { showTestDialog = true }) {
-                            Icon(Icons.Default.Speed, "Test")
-                        }
-                        IconButton(onClick = { showDoctorDialog = true }) {
-                            Icon(Icons.Default.Healing, "Doctor")
-                        }
-                        IconButton(onClick = { showClearDialog = true }) {
-                            Icon(Icons.Default.DeleteSweep, "Clear")
+                        Box {
+                            IconButton(onClick = { showMainMenu = true }) {
+                                Icon(Icons.Default.MoreVert, "Menu")
+                            }
+                            DropdownMenu(
+                                expanded = showMainMenu,
+                                onDismissRequest = { showMainMenu = false }
+                            ) {
+                                // Test
+                                DropdownMenuItem(
+                                    text = { Text("🧪 Тест") },
+                                    onClick = {
+                                        showMainMenu = false
+                                        showTestDialog = true
+                                    }
+                                )
+                                
+                                // Clean sub-menu
+                                DropdownMenuItem(
+                                    text = { Text("🗑️ Очистка ▸") },
+                                    onClick = {
+                                        showMainMenu = false
+                                        showCleanMenu = true
+                                    }
+                                )
+                                
+                                Divider()
+                                
+                                // Doctor
+                                DropdownMenuItem(
+                                    text = { Text("🩺 Доктор") },
+                                    onClick = {
+                                        showMainMenu = false
+                                        showDoctorDialog = true
+                                    }
+                                )
+                                
+                                // Cosmetics
+                                DropdownMenuItem(
+                                    text = { Text("✨ Косметика") },
+                                    onClick = {
+                                        showMainMenu = false
+                                        showCosmeticDialog = true
+                                    }
+                                )
+                                
+                                Divider()
+                                
+                                // Export
+                                DropdownMenuItem(
+                                    text = { Text("💾 Экспорт нод") },
+                                    onClick = {
+                                        showMainMenu = false
+                                        // TODO: Export
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -425,20 +478,93 @@ fun HomeScreen(
             onCancelTest = {
                 viewModel.cancelTest()
             },
-            onQuickClean = {
-                viewModel.quickCleanFailedNodes()
-            },
-            onSmartClean = {
-                viewModel.smartCleanNodes()
-                showTestDialog = false
-            },
             onDismiss = {
                 showTestDialog = false
             }
         )
     }
     
-    // Clear Dialog
+    // Clean Menu Dialog
+    if (showCleanMenu) {
+        AlertDialog(
+            onDismissRequest = { showCleanMenu = false },
+            title = { Text("🗑️ Очистка") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Выберите тип очистки:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Quick clean
+                    Button(
+                        onClick = {
+                            showCleanMenu = false
+                            viewModel.quickCleanFailedNodes()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🗑️ Удалить нерабочие")
+                            Text(
+                                "(быстро, без проверки)",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    
+                    // Smart clean
+                    Button(
+                        onClick = {
+                            showCleanMenu = false
+                            viewModel.smartCleanNodes()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🧹 Умная очистка")
+                            Text(
+                                "(TCP + URL проверка)",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    // Clear all
+                    Button(
+                        onClick = {
+                            showCleanMenu = false
+                            showClearDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFB71C1C)
+                        )
+                    ) {
+                        Text("⚠️ Очистить всё")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCleanMenu = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+    
+    // Clear Dialog (confirm clear all)
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
@@ -806,8 +932,6 @@ fun TestDialog(
     onTestAllTcp: () -> Unit,
     onTestAllUrl: () -> Unit,
     onCancelTest: () -> Unit = {},
-    onQuickClean: () -> Unit = {},
-    onSmartClean: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val (tested, total) = testProgress
@@ -890,47 +1014,6 @@ fun TestDialog(
                 ) {
                     Text("🌐 URL тест всех нод")
                 }
-                
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                // Clean section
-                Text("Очистка:", style = MaterialTheme.typography.labelMedium)
-                
-                Button(
-                    onClick = onQuickClean,
-                    enabled = !isTesting,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("🗑️ Удалить нерабочие (быстро)")
-                }
-                
-                Text(
-                    "Удаляет ноды с latency = ✗",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                Button(
-                    onClick = onSmartClean,
-                    enabled = !isTesting,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Text("🧹 Умная очистка")
-                }
-                
-                Text(
-                    "TCP + URL проверка, удаление нерабочих",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         },
         confirmButton = {
