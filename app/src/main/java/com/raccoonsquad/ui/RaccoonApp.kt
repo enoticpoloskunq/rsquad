@@ -205,6 +205,7 @@ fun RaccoonApp(
                     composable(Screen.Logs.route) {
                         LogsScreen(
                             nodeId = selectedNodeId,
+                            settingsManager = settingsManager,
                             onBack = { navController.popBackStack() }
                         )
                     }

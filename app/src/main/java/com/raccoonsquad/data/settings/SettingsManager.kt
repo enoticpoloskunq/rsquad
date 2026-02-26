@@ -20,7 +20,8 @@ class SettingsManager(private val context: Context) {
         private val LAST_CONNECTED_ID = stringPreferencesKey("last_connected_id")
         private val SUCCESSFUL_CONNECTIONS = intPreferencesKey("successful_connections")
         private val RATING_SHOWN = booleanPreferencesKey("rating_shown")
-        
+        private val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
+
         const val RATING_THRESHOLD = 5  // Show rating after 5 successful connections
     }
     
@@ -82,6 +83,18 @@ class SettingsManager(private val context: Context) {
     suspend fun resetConnectionCounter() {
         context.dataStore.edit { preferences ->
             preferences[SUCCESSFUL_CONNECTIONS] = 0
+        }
+    }
+
+    // Developer Mode - shows all logs vs simplified view
+    val developerMode: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[DEVELOPER_MODE] ?: false
+        }
+
+    suspend fun setDeveloperMode(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[DEVELOPER_MODE] = enabled
         }
     }
 }

@@ -27,8 +27,10 @@ fun SettingsScreen(
 ) {
     val scope = rememberCoroutineScope()
     val currentTheme by settingsManager.theme.collectAsState(initial = AppTheme.PURPLE)
-    
+    val developerMode by settingsManager.developerMode.collectAsState(initial = false)
+
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showDevOptions by remember { mutableStateOf(false) }  // Hidden dev mode unlock
     
     Scaffold(
         topBar = {
@@ -103,6 +105,81 @@ fun SettingsScreen(
                                         .background(getThemePrimaryColor(theme))
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            // Developer section
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Для разработчиков",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Code,
+                                    "Developer",
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                Column {
+                                    Text("Режим разработчика", style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        if (developerMode) "Показываются все логи" else "Только важные сообщения",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        Switch(
+                            checked = developerMode,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    settingsManager.setDeveloperMode(enabled)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Developer mode info
+            if (developerMode) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                "🔧 Developer Mode Active",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Text(
+                                "• Все логи (DEBUG, VERBOSE) видны\n" +
+                                "• Технические детали в диагностике\n" +
+                                "• Расширенная информация об ошибках",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
                         }
                     }
                 }

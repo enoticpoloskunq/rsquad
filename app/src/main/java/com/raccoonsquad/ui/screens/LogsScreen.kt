@@ -21,22 +21,34 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.core.compat.RomCompat
+import com.raccoonsquad.data.settings.SettingsManager
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogsScreen(
     nodeId: String?,
+    settingsManager: SettingsManager,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val listState = rememberLazyListState()
-    
+    val developerMode by settingsManager.developerMode.collectAsState(initial = false)
+
     var showClearDialog by remember { mutableStateOf(false) }
     var autoScroll by remember { mutableStateOf(true) }
     var showCrashDialog by remember { mutableStateOf(false) }
-    
-    val logs = LogManager.getLogs()
+
+    val allLogs = LogManager.getLogs()
+    // Filter logs based on developer mode
+    val logs = if (developerMode) {
+        allLogs
+    } else {
+        // In normal mode, show only important logs (INFO, WARN, ERROR)
+        allLogs.filter { log ->
+            log.level >= android.util.Log.INFO
+        }
+    }
     val hasCrash = LogManager.hasLastCrash()
     
     // Show crash dialog if exists
@@ -56,7 +68,18 @@ fun LogsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("📋 Logs") },
+                title = {
+                    Column {
+                        Text("📋 Logs")
+                        if (developerMode) {
+                            Text(
+                                "🔧 Dev Mode",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -166,15 +189,30 @@ fun LogsScreen(
             }
             
             // Log count
-            Text("Записей: ${logs.size}", style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.padding(horizontal = 12.dp))
+            Text(
+                if (developerMode) "Записей: ${logs.size}" else "Важно: ${logs.size} / Всего: ${allLogs.size}",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
             
             // Logs
             Card(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                 if (logs.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Нет логов", style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                if (developerMode) "Нет логов" else "Нет важных логов",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!developerMode && allLogs.isNotEmpty()) {
+                                Text(
+                                    "Включите режим разработчика для просмотра всех логов",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 } else {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(4.dp)) {
