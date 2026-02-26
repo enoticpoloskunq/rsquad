@@ -630,9 +630,10 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         // Common Xray errors and their fixes
+        // NOTE: Fingerprint changes removed - can break Reality nodes!
         val STRATEGIES = listOf(
-            // Strategy 1: Fragmentation for DPI bypass
-            Strategy("fragment", "Фрагментация пакетов") { config ->
+            // Strategy 1: Fragmentation for DPI bypass (most common fix)
+            Strategy("fragment", "Фрагментация (DPI bypass)") { config ->
                 config.copy(
                     fragmentationEnabled = true,
                     fragmentPackets = "tlshello",
@@ -640,7 +641,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                     fragmentInterval = "10-20"
                 )
             },
-            // Strategy 2: Random fragmentation
+            // Strategy 2: Random fragmentation (variety for DPI)
             Strategy("random_frag", "Случайная фрагментация") { config ->
                 config.copy(
                     fragmentationEnabled = true,
@@ -649,7 +650,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                     fragmentInterval = "${(10..30).random()}-${(30..60).random()}"
                 )
             },
-            // Strategy 3: Noise + Fragment
+            // Strategy 3: Noise + Fragment (for aggressive DPI)
             Strategy("noise_frag", "Шум + Фрагмент") { config ->
                 config.copy(
                     fragmentationEnabled = true,
@@ -662,12 +663,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                     noiseDelay = "10-20"
                 )
             },
-            // Strategy 4: Different fingerprint
-            Strategy("fingerprint", "Смена fingerprint") { config ->
-                val fingerprints = listOf("chrome", "firefox", "safari", "edge", "ios")
-                config.copy(fingerprint = fingerprints.random())
-            },
-            // Strategy 5: Max fragmentation
+            // Strategy 4: Max fragmentation (for heavy DPI)
             Strategy("max_frag", "Макс. фрагментация") { config ->
                 config.copy(
                     fragmentationEnabled = true,
@@ -675,27 +671,79 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                     fragmentLength = "5-15",
                     fragmentInterval = "5-15"
                 )
+            },
+            // Strategy 5: Noise only (subtle obfuscation)
+            Strategy("noise", "Только шум") { config ->
+                config.copy(
+                    noiseEnabled = true,
+                    noiseType = "random",
+                    noisePacketSize = "10-20",
+                    noiseDelay = "5-15"
+                )
             }
         )
 
-        // Detect if node is completely dead (no TCP connection)
-        fun isNodeDead(config: VlessConfig): Boolean {
-            // Node is considered dead if it has high failure rate
+        // Error patterns that indicate node is DEAD (not DPI issue)
+        private val DEAD_NODE_ERRORS = listOf(
+            "connection refused",
+            "no route to host",
+            "network unreachable",
+            "name or service not known",
+            "dns",
+            "timeout"
+        )
+
+        // Error patterns that indicate DPI/blocked
+        private val DPI_ERRORS = listOf(
+            "connection reset",
+            "rst",
+            "blocked",
+            "tls handshake",
+            "handshake failure"
+        )
+
+        // Detect if node is completely dead (not a DPI issue)
+        fun isNodeDead(config: VlessConfig, lastError: String? = null): Boolean {
+            // Check error log for dead node patterns
+            if (lastError != null) {
+                val errorLower = lastError.lowercase()
+                if (DEAD_NODE_ERRORS.any { errorLower.contains(it) }) {
+                    return true
+                }
+            }
+            
+            // Also check stats: if 3+ tests and 0 success = dead node
             val totalTests = config.connectionSuccess + config.connectionFails
             return totalTests >= 3 && config.connectionSuccess == 0
         }
 
+        // Detect if error is DPI-related
+        fun isDPIIssue(lastError: String?): Boolean {
+            if (lastError == null) return false
+            val errorLower = lastError.lowercase()
+            return DPI_ERRORS.any { errorLower.contains(it) }
+        }
+
         // Get recommended strategy based on error type
         fun getStrategyForError(errorLog: String?): Strategy {
-            if (errorLog == null) return STRATEGIES.random()
-
+            // DPI errors -> use fragment strategies
+            if (isDPIIssue(errorLog)) {
+                return STRATEGIES[0] // fragment
+            }
+            
+            // Unknown/random error -> try random strategy
+            return STRATEGIES.random()
+        }
+        
+        // Get human-readable diagnosis
+        fun diagnoseError(errorLog: String?, config: VlessConfig): String {
             return when {
-                errorLog.contains("timeout", ignoreCase = true) -> STRATEGIES[0] // fragment
-                errorLog.contains("reset", ignoreCase = true) -> STRATEGIES[2] // noise_frag
-                errorLog.contains("blocked", ignoreCase = true) -> STRATEGIES[4] // max_frag
-                errorLog.contains("reality", ignoreCase = true) -> STRATEGIES[3] // fingerprint
-                errorLog.contains("connection refused", ignoreCase = true) -> STRATEGIES[0]
-                else -> STRATEGIES.random()
+                isNodeDead(config, errorLog) -> "Нода недоступна - сервер не отвечает"
+                isDPIIssue(errorLog) -> "DPI блокировка - косметика поможет"
+                errorLog?.contains("reality", ignoreCase = true) == true -> "Ошибка Reality - проверьте ключи"
+                errorLog?.contains("timeout", ignoreCase = true) == true -> "Таймаут - сервер перегружен или недоступен"
+                errorLog != null -> "Ошибка: ${errorLog.take(50)}"
+                else -> "Причина неизвестна"
             }
         }
     }
@@ -712,10 +760,12 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         testJob = viewModelScope.launch {
             val maxAttempts = 10  // Reduced from 20 since we use smart strategies
             var currentConfig = config
+            var lastError: String? = null
 
-            // Check if node is completely dead first
+            // Check if node is completely dead first (dead server, not DPI)
             if (BruteForceStrategies.isNodeDead(config)) {
-                _bruteForceState.value = BruteForceState.Failed(0, "Нода недоступна - косметика не поможет")
+                val diagnosis = BruteForceStrategies.diagnoseError(null, config)
+                _bruteForceState.value = BruteForceState.Failed(0, diagnosis)
                 testJob = null
                 return@launch
             }
@@ -766,7 +816,9 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            _bruteForceState.value = BruteForceState.Failed(maxAttempts, "Попробуйте другую ноду")
+            // All attempts failed - provide diagnosis
+            val diagnosis = BruteForceStrategies.diagnoseError(lastError, config)
+            _bruteForceState.value = BruteForceState.Failed(maxAttempts, diagnosis)
             testJob = null
         }
     }
