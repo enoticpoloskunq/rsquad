@@ -426,6 +426,10 @@ fun HomeScreen(
                 viewModel.testAllNodesWithUrl()
                 showTestDialog = false  // Auto-close
             },
+            onTestAllUrlParallel = {
+                viewModel.testAllNodesWithUrlParallel(5)
+                showTestDialog = false  // Auto-close
+            },
             onTestAllThroughVpn = {
                 viewModel.testAllNodesThroughVpn()
                 showTestDialog = false  // Auto-close
@@ -444,6 +448,9 @@ fun HomeScreen(
             },
             onCancelTest = {
                 viewModel.cancelTest()
+            },
+            onQuickClean = {
+                viewModel.quickCleanFailedNodes()
             },
             onSmartClean = {
                 viewModel.smartCleanNodes()
@@ -806,9 +813,11 @@ fun TestDialog(
     onTestAllTcp: () -> Unit,
     onTestUrl: () -> Unit = {},
     onTestAllUrl: () -> Unit = {},  // Test all nodes with URL (no VPN needed)
+    onTestAllUrlParallel: () -> Unit = {},  // Parallel URL test (faster)
     onTestAllThroughVpn: () -> Unit = {},  // Test all nodes through VPN
     onBruteForce: () -> Unit = {},  // Brute force cosmetics
     onCancelTest: () -> Unit = {},  // Cancel current test
+    onQuickClean: () -> Unit = {},  // Quick clean - delete failed nodes
     onSmartClean: () -> Unit = {},  // Smart clean - TCP + URL check
     onDismiss: () -> Unit
 ) {
@@ -837,9 +846,16 @@ fun TestDialog(
                             when (val state = bruteForceState) {
                                 is NodeViewModel.BruteForceState.Running -> {
                                     Text(
-                                        "🎲 Подбор косметики: ${state.attempt}/${state.maxAttempts}",
+                                        "🎲 Подбор: ${state.attempt}/${state.maxAttempts}",
                                         style = MaterialTheme.typography.titleMedium
                                     )
+                                    if (state.strategy.isNotEmpty()) {
+                                        Text(
+                                            state.strategy,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                 }
@@ -857,6 +873,13 @@ fun TestDialog(
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.error
                                     )
+                                    if (state.reason.isNotEmpty()) {
+                                        Text(
+                                            state.reason,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
                                 else -> {
                                     Text(
@@ -911,14 +934,25 @@ fun TestDialog(
                 )
                 
                 Button(
-                    onClick = onTestAllUrl,
+                    onClick = onTestAllUrlParallel,
                     enabled = !isTesting,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.secondary
                     )
                 ) {
-                    Text("🌐 URL тест всех нод")
+                    Text("🌐 URL тест (параллельно)")
+                }
+                
+                Button(
+                    onClick = onTestAllUrl,
+                    enabled = !isTesting,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Text("🌐 URL тест (последовательно)")
                 }
                 
                 // Additional VPN tests (only when VPN is active)
@@ -968,24 +1002,44 @@ fun TestDialog(
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
-                // Smart clean section
-                Text("Умная очистка:", style = MaterialTheme.typography.labelMedium)
-                Text(
-                    "TCP + URL проверка, удаление нерабочих",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+                // Clean section
+                Text("Очистка:", style = MaterialTheme.typography.labelMedium)
                 
                 Button(
-                    onClick = onSmartClean,
+                    onClick = onQuickClean,
                     enabled = !isTesting,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("🗑️ Умная очистка")
+                    Text("🗑️ Удалить нерабочие (быстро)")
                 }
+                
+                Text(
+                    "Удаляет ноды с latency = ✗",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Button(
+                    onClick = onSmartClean,
+                    enabled = !isTesting,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFB71C1C)
+                    )
+                ) {
+                    Text("🔍 Полная проверка + очистка")
+                }
+                
+                Text(
+                    "TCP + URL проверка всех нод",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
         confirmButton = {

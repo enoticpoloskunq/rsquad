@@ -12,6 +12,8 @@ import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.repository.NodeRepository
 import com.raccoonsquad.data.parser.UriParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -292,6 +294,63 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     /**
+     * Parallel URL test - tests multiple nodes at once for speed
+     * Uses concurrency limit to avoid overwhelming the system
+     */
+    fun testAllNodesWithUrlParallel(concurrency: Int = 5) {
+        testJob?.cancel()
+        testJob = viewModelScope.launch {
+            val allNodes = nodes.value
+            val total = allNodes.size
+            _isAutoTesting.value = true
+            _testProgress.value = 0 to total
+            
+            // Use a mutex for thread-safe progress updates
+            var tested = 0
+            val progressLock = Any()
+            
+            // Partition nodes into batches for parallel processing
+            val results = allNodes.mapIndexed { index, config ->
+                async(Dispatchers.IO) {
+                    // Check if cancelled
+                    if (!isActive) {
+                        null
+                    } else {
+                        val result = NodeTester.testNodeUrl(config)
+                        val updatedConfig = config.copy(
+                            latency = if (result.success) result.latencyMs else -1L,
+                            lastUrlLatency = if (result.success) result.latencyMs else null,
+                            lastTestTime = System.currentTimeMillis()
+                        )
+                        
+                        // Update progress
+                        synchronized(progressLock) {
+                            tested++
+                            _testProgress.value = tested to total
+                        }
+                        
+                        updatedConfig
+                    }
+                }
+            }.awaitAll().filterNotNull()
+            
+            // Batch update
+            withContext(Dispatchers.IO) {
+                repository.updateAllNodes(results)
+            }
+            
+            // Calculate results
+            val successCount = results.count { it.lastUrlLatency != null && it.lastUrlLatency > 0 }
+            val failCount = results.size - successCount
+            _testResult.value = "✅ URL тест (${concurrency}x): $successCount работает, $failCount недоступно"
+            
+            _isAutoTesting.value = false
+            _testProgress.value = 0 to 0
+            testJob = null
+        }
+    }
+    
+    /**
      * Test all nodes through active VPN connection
      * This tests real connectivity by switching to each node and testing
      */
@@ -557,13 +616,92 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     
     sealed class BruteForceState {
         object Idle : BruteForceState()
-        data class Running(val attempt: Int, val maxAttempts: Int) : BruteForceState()
+        data class Running(val attempt: Int, val maxAttempts: Int, val strategy: String = "") : BruteForceState()
         data class Success(val attempt: Int, val latency: Long) : BruteForceState()
-        data class Failed(val attempts: Int) : BruteForceState()
+        data class Failed(val attempts: Int, val reason: String = "") : BruteForceState()
+    }
+
+    // Error pattern -> Cosmetic strategy mapping
+    private object BruteForceStrategies {
+        data class Strategy(
+            val name: String,
+            val description: String,
+            val apply: (VlessConfig) -> VlessConfig
+        )
+
+        // Common Xray errors and their fixes
+        val STRATEGIES = listOf(
+            // Strategy 1: Fragmentation for DPI bypass
+            Strategy("fragment", "Фрагментация пакетов") { config ->
+                config.copy(
+                    fragmentationEnabled = true,
+                    fragmentPackets = "tlshello",
+                    fragmentLength = "100-200",
+                    fragmentInterval = "10-20"
+                )
+            },
+            // Strategy 2: Random fragmentation
+            Strategy("random_frag", "Случайная фрагментация") { config ->
+                config.copy(
+                    fragmentationEnabled = true,
+                    fragmentPackets = "1-3",
+                    fragmentLength = "${(5..20).random()}-${(20..50).random()}",
+                    fragmentInterval = "${(10..30).random()}-${(30..60).random()}"
+                )
+            },
+            // Strategy 3: Noise + Fragment
+            Strategy("noise_frag", "Шум + Фрагмент") { config ->
+                config.copy(
+                    fragmentationEnabled = true,
+                    fragmentPackets = "1-3",
+                    fragmentLength = "10-20",
+                    fragmentInterval = "10-20",
+                    noiseEnabled = true,
+                    noiseType = "random",
+                    noisePacketSize = "5-10",
+                    noiseDelay = "10-20"
+                )
+            },
+            // Strategy 4: Different fingerprint
+            Strategy("fingerprint", "Смена fingerprint") { config ->
+                val fingerprints = listOf("chrome", "firefox", "safari", "edge", "ios")
+                config.copy(fingerprint = fingerprints.random())
+            },
+            // Strategy 5: Max fragmentation
+            Strategy("max_frag", "Макс. фрагментация") { config ->
+                config.copy(
+                    fragmentationEnabled = true,
+                    fragmentPackets = "1-5",
+                    fragmentLength = "5-15",
+                    fragmentInterval = "5-15"
+                )
+            }
+        )
+
+        // Detect if node is completely dead (no TCP connection)
+        fun isNodeDead(config: VlessConfig): Boolean {
+            // Node is considered dead if it has high failure rate
+            val totalTests = config.connectionSuccess + config.connectionFails
+            return totalTests >= 3 && config.connectionSuccess == 0
+        }
+
+        // Get recommended strategy based on error type
+        fun getStrategyForError(errorLog: String?): Strategy {
+            if (errorLog == null) return STRATEGIES.random()
+
+            return when {
+                errorLog.contains("timeout", ignoreCase = true) -> STRATEGIES[0] // fragment
+                errorLog.contains("reset", ignoreCase = true) -> STRATEGIES[2] // noise_frag
+                errorLog.contains("blocked", ignoreCase = true) -> STRATEGIES[4] // max_frag
+                errorLog.contains("reality", ignoreCase = true) -> STRATEGIES[3] // fingerprint
+                errorLog.contains("connection refused", ignoreCase = true) -> STRATEGIES[0]
+                else -> STRATEGIES.random()
+            }
+        }
     }
     
     /**
-     * Brute force cosmetics - try random cosmetics until node works
+     * Brute force cosmetics - smart approach with error-based strategies
      * Requires VPN to be connected to this node first
      */
     fun bruteForceCosmetics(
@@ -572,43 +710,63 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         testJob?.cancel()
         testJob = viewModelScope.launch {
-            val maxAttempts = 20
+            val maxAttempts = 10  // Reduced from 20 since we use smart strategies
             var currentConfig = config
 
-            for (attempt in 1..maxAttempts) {
-                // Check if cancelled
+            // Check if node is completely dead first
+            if (BruteForceStrategies.isNodeDead(config)) {
+                _bruteForceState.value = BruteForceState.Failed(0, "Нода недоступна - косметика не поможет")
+                testJob = null
+                return@launch
+            }
+
+            // First attempt: test current config
+            _bruteForceState.value = BruteForceState.Running(1, maxAttempts, "Тест текущей конфигурации")
+            onReconnectNeeded(currentConfig)
+            kotlinx.coroutines.delay(3000)
+
+            var result = testUrlDirect(currentConfig)
+            if (result.first) {
+                _bruteForceState.value = BruteForceState.Success(1, result.second)
+                repository.updateNode(currentConfig)
+                testJob = null
+                return@launch
+            }
+
+            // Try strategies based on errors
+            for (attempt in 2..maxAttempts) {
                 if (!isActive) {
                     LogManager.i("ViewModel", "Brute force cancelled by user")
                     _bruteForceState.value = BruteForceState.Idle
                     return@launch
                 }
-                
-                _bruteForceState.value = BruteForceState.Running(attempt, maxAttempts)
-                
-                // Apply random cosmetics (except first attempt - test current config)
-                if (attempt > 1) {
-                    currentConfig = CosmeticPresets.randomize(currentConfig)
-                }
-                
+
+                // Get strategy based on attempt number (cycle through strategies)
+                val strategy = BruteForceStrategies.STRATEGIES[(attempt - 2) % BruteForceStrategies.STRATEGIES.size]
+                _bruteForceState.value = BruteForceState.Running(attempt, maxAttempts, strategy.description)
+
+                // Apply strategy
+                currentConfig = strategy.apply(config)
+
                 // Notify UI to reconnect VPN with new config
                 onReconnectNeeded(currentConfig)
-                
+
                 // Wait for VPN to establish
                 kotlinx.coroutines.delay(3000)
-                
+
                 // Test URL
-                val success = testUrlDirect(currentConfig)
-                
-                if (success.first) {
+                result = testUrlDirect(currentConfig)
+
+                if (result.first) {
                     // Found working config!
                     repository.updateNode(currentConfig)
-                    _bruteForceState.value = BruteForceState.Success(attempt, success.second)
+                    _bruteForceState.value = BruteForceState.Success(attempt, result.second)
                     testJob = null
                     return@launch
                 }
             }
-            
-            _bruteForceState.value = BruteForceState.Failed(maxAttempts)
+
+            _bruteForceState.value = BruteForceState.Failed(maxAttempts, "Попробуйте другую ноду")
             testJob = null
         }
     }
@@ -677,6 +835,33 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     
     fun resetTestResult() {
         _testResult.value = null
+    }
+    
+    /**
+     * Quick clean - delete nodes that are already marked as failed (latency=-1)
+     * No re-testing, just removes known bad nodes
+     */
+    fun quickCleanFailedNodes() {
+        viewModelScope.launch {
+            val allNodes = nodes.value
+            
+            // Find nodes with failed status (latency = -1 means failed last test)
+            val failedNodes = allNodes.filter { it.latency != null && it.latency < 0 }
+            val untestedNodes = allNodes.filter { it.latency == null }
+            
+            if (failedNodes.isEmpty()) {
+                _testResult.value = "✅ Нет нерабочих нод для удаления"
+                return@launch
+            }
+            
+            // Delete failed nodes
+            withContext(Dispatchers.IO) {
+                failedNodes.forEach { repository.deleteNode(it.id) }
+            }
+            
+            _testResult.value = "🗑️ Удалено ${failedNodes.size} нерабочих нод (осталось ${untestedNodes.size + allNodes.count { it.latency != null && it.latency > 0 }})"
+            _importCount.value = -failedNodes.size
+        }
     }
     
     /**
