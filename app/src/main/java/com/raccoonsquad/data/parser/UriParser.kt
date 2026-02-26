@@ -71,7 +71,13 @@ object UriParser {
             // Reality params
             val realityPublicKey = params["pbk"] ?: params["publicKey"] ?: ""
             val realityShortId = params["sid"] ?: params["shortId"] ?: ""
-            val realitySpiderX = params["spx"] ?: params["spiderX"] ?: "/"
+            // URL-decode spiderX (may be %2F for /)
+            val spiderXRaw = params["spx"] ?: params["spiderX"] ?: "/"
+            val realitySpiderX = try {
+                java.net.URLDecoder.decode(spiderXRaw, "UTF-8")
+            } catch (e: Exception) {
+                spiderXRaw
+            }
             
             // Fragmentation - THE KEY FEATURE!
             val fragmentationEnabled = params.containsKey("fragment") || 

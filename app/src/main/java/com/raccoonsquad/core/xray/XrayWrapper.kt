@@ -21,6 +21,15 @@ object XrayWrapper {
     
     private const val TAG = "Xray"
     
+    // URL-decode spiderX (may be stored as %2F for /)
+    private fun decodeSpiderX(spiderX: String): String {
+        return try {
+            java.net.URLDecoder.decode(spiderX, "UTF-8")
+        } catch (e: Exception) {
+            spiderX
+        }
+    }
+    
     private var coreController: CoreController? = null
     private var isRunning = false
     private var currentConfig: String? = null
@@ -246,7 +255,7 @@ object XrayWrapper {
                         if (config.sni.isNotEmpty()) put("serverName", config.sni)
                         if (config.realityPublicKey.isNotEmpty()) put("publicKey", config.realityPublicKey)
                         if (config.realityShortId.isNotEmpty()) put("shortId", config.realityShortId)
-                        if (config.realitySpiderX.isNotEmpty()) put("spiderX", config.realitySpiderX)
+                        if (config.realitySpiderX.isNotEmpty()) put("spiderX", decodeSpiderX(config.realitySpiderX))
                     })
                 } else if (config.securityMode == SecurityMode.TLS) {
                     put("tlsSettings", JSONObject().apply {
@@ -628,7 +637,7 @@ object XrayWrapper {
                         if (config.sni.isNotEmpty()) put("serverName", config.sni)
                         if (config.realityPublicKey.isNotEmpty()) put("publicKey", config.realityPublicKey)
                         if (config.realityShortId.isNotEmpty()) put("shortId", config.realityShortId)
-                        if (config.realitySpiderX.isNotEmpty()) put("spiderX", config.realitySpiderX)
+                        if (config.realitySpiderX.isNotEmpty()) put("spiderX", decodeSpiderX(config.realitySpiderX))
                     })
                 } else if (config.securityMode == SecurityMode.TLS) {
                     put("tlsSettings", JSONObject().apply {
