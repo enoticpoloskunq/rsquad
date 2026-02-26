@@ -476,13 +476,13 @@ object XrayWrapper {
      * 
      * @param configJson Xray config JSON
      * @param url Test URL (default: https://www.google.com/generate_204)
-     * @return Delay in milliseconds, or -1 on error
+     * @return Pair of (delay in milliseconds, error message or null)
      */
-    fun measureDelay(configJson: String, url: String = "https://www.google.com/generate_204"): Long {
+    fun measureDelayWithError(configJson: String, url: String = "https://www.google.com/generate_204"): Pair<Long, String?> {
         // Ensure Xray is initialized (sets xray.location.asset env var)
         if (!ensureInitialized()) {
             LogManager.e(TAG, "measureDelay() aborted: Xray not initialized")
-            return -1L
+            return Pair(-1L, "Xray not initialized")
         }
         
         return try {
@@ -491,17 +491,45 @@ object XrayWrapper {
             
             // Use libv2ray's built-in delay measurement
             // This starts a temporary Xray instance and measures the delay
+            // Returns -1 on failure, throws on error
             val delay = Libv2ray.measureOutboundDelay(configJson, url)
             
             val elapsed = System.currentTimeMillis() - startTime
             LogManager.d(TAG, "measureDelay() result: ${delay}ms, total time: ${elapsed}ms")
             
-            delay
+            if (delay > 0) {
+                Pair(delay, null)
+            } else {
+                // Delay is -1 or 0 = connection failed
+                // Most likely causes: timeout, TLS handshake failure, or server unreachable
+                val errorMsg = when {
+                    elapsed > 25000 -> "TLS handshake timeout"  // Long wait = timeout
+                    elapsed > 10000 -> "Connection timeout"     // Medium wait = connection issue
+                    else -> "Connection refused"                  // Quick fail = server down
+                }
+                LogManager.w(TAG, "measureDelay() failed: $errorMsg (waited ${elapsed}ms)")
+                Pair(-1L, errorMsg)
+            }
             
         } catch (e: Throwable) {
-            LogManager.e(TAG, "measureDelay() failed: ${e.message}")
-            -1L
+            val errorMsg = e.message ?: "Unknown error"
+            LogManager.e(TAG, "measureDelay() exception: $errorMsg")
+            Pair(-1L, errorMsg)
         }
+    }
+    
+    /**
+     * Measure delay for a config WITHOUT starting VPN (legacy method)
+     * This is the REAL test - starts Xray temporarily and measures HTTP request time
+     * Uses Libv2ray.measureOutboundDelay() internally
+     * 
+     * @param configJson Xray config JSON
+     * @param url Test URL (default: https://www.google.com/generate_204)
+     * @return Delay in milliseconds, or -1 on error
+     */
+    fun measureDelay(configJson: String, url: String = "https://www.google.com/generate_204"): Long {
+        val (delay, _) = measureDelayWithError(configJson, url)
+        return delay
     }
 
     /**
@@ -511,6 +539,16 @@ object XrayWrapper {
     fun testConfig(config: VlessConfig, url: String = "https://www.google.com/generate_204"): Long {
         val configJson = generateTestConfig(config)
         return measureDelay(configJson, url)
+    }
+    
+    /**
+     * Test a VlessConfig by measuring delay, returns error message too
+     * Generates config JSON internally (uses simplified test config)
+     * @return Pair of (delay in ms, error message or null)
+     */
+    fun testConfigWithError(config: VlessConfig, url: String = "https://www.google.com/generate_204"): Pair<Long, String?> {
+        val configJson = generateTestConfig(config)
+        return measureDelayWithError(configJson, url)
     }
     
     /**

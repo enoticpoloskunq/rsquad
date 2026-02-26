@@ -694,12 +694,14 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         // Error patterns that indicate DPI/blocked
+        // "timeout" is often DPI - server reachable but TLS is blocked
         private val DPI_ERRORS = listOf(
             "connection reset",
             "rst",
             "blocked",
             "tls handshake",
-            "handshake failure"
+            "handshake failure",
+            "timeout"
         )
 
         // Detect if node is completely dead (not a DPI issue)
@@ -737,11 +739,16 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         
         // Get human-readable diagnosis
         fun diagnoseError(errorLog: String?, config: VlessConfig): String {
+            // Check DPI FIRST - more specific than timeout/dead node
+            if (isDPIIssue(errorLog)) {
+                return "DPI блокировка - косметика поможет"
+            }
+            
             return when {
                 isNodeDead(config, errorLog) -> "Нода недоступна - сервер не отвечает"
-                isDPIIssue(errorLog) -> "DPI блокировка - косметика поможет"
                 errorLog?.contains("reality", ignoreCase = true) == true -> "Ошибка Reality - проверьте ключи"
-                errorLog?.contains("timeout", ignoreCase = true) == true -> "Таймаут - сервер перегружен или недоступен"
+                errorLog?.contains("eof", ignoreCase = true) == true -> "Сервер сбросил соединение"
+                errorLog?.contains("config", ignoreCase = true) == true -> "Ошибка конфигурации"
                 errorLog != null -> "Ошибка: ${errorLog.take(50)}"
                 else -> "Причина неизвестна"
             }
@@ -817,7 +824,9 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             // All attempts failed - provide diagnosis
+            LogManager.w("ViewModel", "Brute force failed. Last error: $lastBruteForceError")
             val diagnosis = BruteForceStrategies.diagnoseError(lastBruteForceError, config)
+            LogManager.w("ViewModel", "Diagnosis: $diagnosis")
             _bruteForceState.value = BruteForceState.Failed(maxAttempts, diagnosis)
             testJob = null
         }
@@ -835,37 +844,26 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     
     private suspend fun testUrlDirect(config: VlessConfig): Pair<Boolean, Long> {
         return withContext(Dispatchers.IO) {
-            try {
-                // Use XrayWrapper.testConfig() - tests SPECIFIC config, not active proxy
-                // This avoids false positives when old Xray is still running
-                val latency = com.raccoonsquad.core.xray.XrayWrapper.testConfig(config)
-                
-                val success = latency > 0
-                
-                // Update rating stats
-                val updatedConfig = config.copy(
-                    connectionSuccess = config.connectionSuccess + if (success) 1 else 0,
-                    connectionFails = config.connectionFails + if (success) 0 else 1,
-                    lastUrlLatency = if (success) latency else -1L,
-                    lastTestTime = System.currentTimeMillis()
-                )
-                repository.updateNode(updatedConfig)
-                
-                Pair(success, if (success) latency else 0L)
-            } catch (e: Exception) {
-                // Save error for diagnosis
-                lastBruteForceError = e.message
-                
-                // Update failure stats
-                val updatedConfig = config.copy(
-                    connectionFails = config.connectionFails + 1,
-                    lastUrlLatency = -1L,
-                    lastTestTime = System.currentTimeMillis()
-                )
-                repository.updateNode(updatedConfig)
-                
-                Pair(false, 0L)
-            }
+            // Use XrayWrapper.testConfigWithError() - tests SPECIFIC config, returns error too
+            // This avoids false positives when old Xray is still running
+            val (latency, error) = com.raccoonsquad.core.xray.XrayWrapper.testConfigWithError(config)
+            
+            // Save error for diagnosis
+            lastBruteForceError = error
+            LogManager.d("ViewModel", "testUrlDirect: latency=$latency, error=$error")
+            
+            val success = latency > 0
+            
+            // Update rating stats
+            val updatedConfig = config.copy(
+                connectionSuccess = config.connectionSuccess + if (success) 1 else 0,
+                connectionFails = config.connectionFails + if (success) 0 else 1,
+                lastUrlLatency = if (success) latency else -1L,
+                lastTestTime = System.currentTimeMillis()
+            )
+            repository.updateNode(updatedConfig)
+            
+            Pair(success, if (success) latency else 0L)
         }
     }
     
