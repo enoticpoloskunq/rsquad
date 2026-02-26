@@ -1,112 +1,34 @@
 # GitLab CI/CD for Raccoon Squad VPN
-# Builds APK automatically on push and tags
-
-image: eclipse-temurin:17-jdk
+image: openjdk:17-jdk
 
 stages:
   - build
-  - release
 
-variables:
-  ANDROID_COMPILE_SDK: "35"
-  ANDROID_BUILD_TOOLS: "35.0.0"
-  ANDROID_SDK_TOOLS: "11076708"
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
-  GIT_DEPTH: "1"
-
-.setup_android: &setup_android
-  - apt-get --quiet update --yes
-  - apt-get --quiet install --yes wget tar unzip lib32stdc++6 lib32z1 sdkmanager
+before_script:
+  - apt-get update -qq && apt-get install -y wget unzip
   - mkdir -p android-sdk/cmdline-tools
   - export ANDROID_HOME=$PWD/android-sdk
-  - export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-  - wget --quiet --output-document=android-sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_SDK_TOOLS}_latest.zip
-  - unzip -q -d android-sdk/cmdline-tools android-sdk.zip
+  - export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+  - wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O android-sdk.zip
+  - unzip -q android-sdk.zip -d android-sdk/cmdline-tools
   - mv android-sdk/cmdline-tools/cmdline-tools android-sdk/cmdline-tools/latest
   - yes | sdkmanager --licenses || true
-  - yes | sdkmanager "platforms;android-${ANDROID_COMPILE_SDK}" "build-tools;${ANDROID_BUILD_TOOLS}"
+  - yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
   - chmod +x ./gradlew
 
-cache:
-  key: ${CI_COMMIT_REF_SLUG}
-  paths:
-    - .gradle/
-    - android-sdk/
-    - app/libs/
-
-# Build Debug APK
-build_debug:
+build_apk:
   stage: build
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_BRANCH == "master"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  before_script:
-    - *setup_android
+  only:
+    - main
+    - master
+    - tags
   script:
     - mkdir -p app/libs
-    - if [ ! -f app/libs/libv2ray.aar ]; then
-        curl -L -o app/libs/libv2ray.aar "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar";
-      fi
-    - ./gradlew assembleDebug --no-daemon
+    - curl -L -o app/libs/libv2ray.aar "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
+    - ./gradlew assembleDebug assembleRelease --no-daemon
   artifacts:
-    name: "raccoon-squad-debug-${CI_COMMIT_SHORT_SHA}"
+    name: "raccoon-squad-$CI_COMMIT_SHORT_SHA"
     paths:
       - app/build/outputs/apk/debug/*.apk
-    expire_in: 1 week
-
-# Build Release APK
-build_release:
-  stage: build
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_TAG
-  before_script:
-    - *setup_android
-  script:
-    - mkdir -p app/libs
-    - if [ ! -f app/libs/libv2ray.aar ]; then
-        curl -L -o app/libs/libv2ray.aar "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar";
-      fi
-    - ./gradlew assembleRelease --no-daemon
-  artifacts:
-    name: "raccoon-squad-release-${CI_COMMIT_SHORT_SHA}"
-    paths:
       - app/build/outputs/apk/release/*.apk
     expire_in: 1 month
-
-# Create GitLab Release on tag
-create_release:
-  stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
-  rules:
-    - if: $CI_COMMIT_TAG
-  needs:
-    - job: build_release
-      optional: true
-  script:
-    - echo "Creating release for $CI_COMMIT_TAG"
-  release:
-    name: "Raccoon Squad $CI_COMMIT_TAG"
-    tag_name: $CI_COMMIT_TAG
-    description: |
-      ## 🦝 Raccoon Squad $CI_COMMIT_TAG
-      
-      ### Скачать APK
-      Скачайте APK из раздела **Assets** ниже или из артифактов билда.
-      
-      | Архитектура | Файл |
-      |-------------|------|
-      | arm64-v8a | Для современных устройств |
-      | armeabi-v7a | Для старых 32-битных устройств |
-      
-      ### Особенности
-      - 🛡️ Kill Switch - блокировка интернета при обрыве VPN
-      - 🔄 Auto-reconnect - автоматическое переподключение
-      - 🌍 56 стран с флагами
-      - ✈️ Pre-flight check - проверка нод перед подключением
-      - 🚀 R8 обфускация в release
-      
-      ### Установка
-      Скачайте APK и установите на устройство. Требуется Android 7.0+
