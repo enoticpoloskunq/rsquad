@@ -32,6 +32,7 @@ import com.raccoonsquad.core.vpn.RaccoonVpnService
 import com.raccoonsquad.core.util.NodeTester
 import com.raccoonsquad.core.stats.TrafficStats
 import com.raccoonsquad.core.diagnosis.Doctor
+import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.data.settings.SettingsManager
 import com.raccoonsquad.ui.viewmodel.NodeViewModel
@@ -437,7 +438,9 @@ fun HomeScreen(
                 showTestDialog = false  // Auto-close
             },
             onBruteForce = {
+                LogManager.i("HomeScreen", "Brute force button clicked! activeId=$activeId")
                 viewModel.bruteForceActiveNode { updatedConfig ->
+                    LogManager.i("HomeScreen", "Brute force reconnecting with config: ${updatedConfig.name}")
                     // Reconnect VPN with new config
                     VpnController.stopVpn(context)
                     viewModel.setActiveNode(null)
@@ -991,7 +994,10 @@ fun TestDialog(
                     )
                     
                     Button(
-                        onClick = onBruteForce,
+                        onClick = {
+                            LogManager.i("TestDialog", "Brute force button onClick triggered")
+                            onBruteForce()
+                        },
                         enabled = !isTesting,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
