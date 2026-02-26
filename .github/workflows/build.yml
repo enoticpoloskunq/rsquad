@@ -3,6 +3,8 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, master ]
 
@@ -88,3 +90,36 @@ jobs:
       with:
         name: raccoon-squad-armeabi-release
         path: app/build/outputs/apk/release/*armeabi-v7a*.apk
+    
+    # Rename APKs for release
+    - name: Prepare Release APKs
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        mkdir -p release
+        cp app/build/outputs/apk/release/*arm64-v8a*.apk release/raccoon-squad-arm64-release.apk
+        cp app/build/outputs/apk/release/*armeabi-v7a*.apk release/raccoon-squad-armeabi-release.apk
+        cp app/build/outputs/apk/debug/*arm64-v8a*.apk release/raccoon-squad-arm64-debug.apk
+        cp app/build/outputs/apk/debug/*armeabi-v7a*.apk release/raccoon-squad-armeabi-debug.apk
+        ls -la release/
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Raccoon Squad ${{ github.ref_name }}
+        body: |
+          ## 🦝 Raccoon Squad ${{ github.ref_name }}
+          
+          ### Скачать
+          - **raccoon-squad-arm64-release.apk** - для большинства современных устройств
+          - **raccoon-squad-armeabi-release.apk** - для старых 32-битных устройств
+          - **raccoon-squad-arm64-debug.apk** - debug версия для arm64
+          - **raccoon-squad-armeabi-debug.apk** - debug версия для armeabi
+          
+          ### Изменения
+          См. [README](https://github.com/shrau77/rsquad#версии)
+        files: release/*.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
