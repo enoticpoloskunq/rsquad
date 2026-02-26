@@ -1160,10 +1160,16 @@ fun CosmeticDialog(
 fun DoctorDialog(
     activeConfig: VlessConfig?,
     isVpnActive: Boolean,
+    bruteForceState: NodeViewModel.BruteForceState = NodeViewModel.BruteForceState.Idle,
+    onBruteForce: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var isRunning by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<Doctor.DiagnosisResult?>(null) }
+    
+    val isBruteForcing = bruteForceState is NodeViewModel.BruteForceState.Running
+    val bruteForceDone = bruteForceState is NodeViewModel.BruteForceState.Success || 
+                          bruteForceState is NodeViewModel.BruteForceState.Failed
     
     LaunchedEffect(Unit) {
         isRunning = true
@@ -1172,23 +1178,106 @@ fun DoctorDialog(
     }
     
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = if (isBruteForcing) { {} } else onDismiss,
         icon = { Text("🩺", style = MaterialTheme.typography.headlineMedium) },
         title = { Text("Диагностика") },
         text = {
-            if (isRunning) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CircularProgressIndicator()
-                    Text("Проверка...")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Brute Force Progress
+                when (val state = bruteForceState) {
+                    is NodeViewModel.BruteForceState.Running -> {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF9C27B0).copy(alpha = 0.2f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "🎲 Подбор косметики: ${state.attempt}/${state.maxAttempts}",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                if (state.strategy.isNotEmpty()) {
+                                    Text(
+                                        state.strategy,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                    is NodeViewModel.BruteForceState.Success -> {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF4CAF50).copy(alpha = 0.2f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "✅ Успех! Попытка ${state.attempt}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color(0xFF4CAF50)
+                                )
+                                Text("Latency: ${state.latency}ms")
+                            }
+                        }
+                    }
+                    is NodeViewModel.BruteForceState.Failed -> {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    "❌ Не удалось за ${state.attempts} попыток",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                if (state.reason.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "Диагноз: ${state.reason}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else -> {}
                 }
-            } else if (result != null) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                
+                // Diagnosis Results
+                if (isRunning) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text("Проверка...")
+                    }
+                } else if (result != null) {
                     result!!.checks.forEach { check ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1224,11 +1313,33 @@ fun DoctorDialog(
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
+                    
+                    // Brute Force Button (only if VPN active and not currently running)
+                    if (isVpnActive && activeConfig != null && !isBruteForcing && !bruteForceDone) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider()
+                        Text("Подбор косметики:", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            "Пробует разные настройки маскировки для обхода DPI",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Button(
+                            onClick = onBruteForce,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF9C27B0)
+                            )
+                        ) {
+                            Text("🎲 Подобрать косметику")
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isBruteForcing) {
                 Text("OK")
             }
         }
