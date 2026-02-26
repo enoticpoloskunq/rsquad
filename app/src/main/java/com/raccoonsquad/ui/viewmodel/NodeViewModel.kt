@@ -765,21 +765,34 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         config: VlessConfig,
         onReconnectNeeded: (VlessConfig) -> Unit
     ) {
+        LogManager.i("ViewModel", "bruteForceCosmetics() called for: ${config.name}")
+        
+        // Don't start if already running
+        if (testJob?.isActive == true) {
+            LogManager.w("ViewModel", "Brute force already running, ignoring duplicate call")
+            return
+        }
+        
         testJob?.cancel()
         testJob = viewModelScope.launch {
+            LogManager.i("ViewModel", "bruteForceCosmetics coroutine started")
             val maxAttempts = 10  // Reduced from 20 since we use smart strategies
             var currentConfig = config
             lastBruteForceError = null  // Reset error before starting
 
             // Check if node is completely dead first (dead server, not DPI)
-            if (BruteForceStrategies.isNodeDead(config)) {
+            val isDead = BruteForceStrategies.isNodeDead(config)
+            LogManager.d("ViewModel", "isNodeDead check: $isDead (success=${config.connectionSuccess}, fails=${config.connectionFails})")
+            if (isDead) {
                 val diagnosis = BruteForceStrategies.diagnoseError(null, config)
+                LogManager.w("ViewModel", "Node is dead, diagnosis: $diagnosis")
                 _bruteForceState.value = BruteForceState.Failed(0, diagnosis)
                 testJob = null
                 return@launch
             }
 
             // First attempt: test current config
+            LogManager.i("ViewModel", "Starting first attempt - testing current config")
             _bruteForceState.value = BruteForceState.Running(1, maxAttempts, "Тест текущей конфигурации")
             onReconnectNeeded(currentConfig)
             kotlinx.coroutines.delay(3000)
