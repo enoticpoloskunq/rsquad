@@ -354,6 +354,6 @@ private fun parseColor(hex: String): Color {
     return try {
         Color(android.graphics.Color.parseColor(hex))
     } catch (e: Exception) {
-        MaterialTheme.colorScheme.primary
+        Color(0xFF7C4DFF) // Default purple
     }
 }

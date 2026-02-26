@@ -6,6 +6,8 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.data.model.VlessConfig
+import com.raccoonsquad.data.model.SecurityMode
+import com.raccoonsquad.data.model.FlowMode
 import com.raccoonsquad.data.settings.SettingsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,17 +39,22 @@ data class NodeBackup(
     val serverAddress: String,
     val port: Int,
     val uuid: String,
-    val encryption: String,
+    val securityMode: String,
+    val sni: String,
+    val fingerprint: String,
     val flow: String?,
     val isFavorite: Boolean,
     val latency: Long?,
     val fragmentationEnabled: Boolean,
-    val fragmentationSize: Int,
+    val fragmentType: String,
+    val fragmentPackets: String,
+    val fragmentLength: String,
+    val fragmentInterval: String,
     val noiseEnabled: Boolean,
-    val noiseSize: Int,
+    val noiseType: String,
+    val noisePacketSize: String,
     val noiseDelay: String,
-    val mtu: Int,
-    val remark: String?
+    val mtu: String
 )
 
 @Serializable
@@ -89,22 +96,27 @@ object BackupManager {
                 serverAddress = config.serverAddress,
                 port = config.port,
                 uuid = config.uuid,
-                encryption = config.encryption,
-                flow = config.flow,
+                securityMode = config.securityMode.name,
+                sni = config.sni,
+                fingerprint = config.fingerprint,
+                flow = if (config.flow != FlowMode.NONE) config.flow.name else null,
                 isFavorite = config.isFavorite,
                 latency = config.latency,
                 fragmentationEnabled = config.fragmentationEnabled,
-                fragmentationSize = config.fragmentationSize,
+                fragmentType = config.fragmentType,
+                fragmentPackets = config.fragmentPackets,
+                fragmentLength = config.fragmentLength,
+                fragmentInterval = config.fragmentInterval,
                 noiseEnabled = config.noiseEnabled,
-                noiseSize = config.noiseSize,
+                noiseType = config.noiseType,
+                noisePacketSize = config.noisePacketSize,
                 noiseDelay = config.noiseDelay,
-                mtu = config.mtu,
-                remark = config.remark
+                mtu = config.mtu
             )
         }
         
         val settingsBackup = SettingsBackup(
-            theme = "PURPLE", // Will be fetched from settings
+            theme = "PURPLE",
             developerMode = false,
             killSwitch = true,
             autoReconnect = true
@@ -162,7 +174,6 @@ object BackupManager {
             
             val backupData = json.decodeFromString<BackupData>(content)
             
-            // Validate version
             if (backupData.version > BACKUP_VERSION) {
                 throw IllegalArgumentException("Backup version ${backupData.version} is newer than supported ($BACKUP_VERSION)")
             }
@@ -184,25 +195,36 @@ object BackupManager {
                 serverAddress = backup.serverAddress,
                 port = backup.port,
                 uuid = backup.uuid,
-                encryption = backup.encryption,
-                flow = backup.flow,
-                isFavorite = backup.isFavorite,
-                latency = backup.latency,
+                securityMode = try { SecurityMode.valueOf(backup.securityMode) } catch(e: Exception) { SecurityMode.REALITY },
+                sni = backup.sni,
+                fingerprint = backup.fingerprint,
+                flow = backup.flow?.let { try { FlowMode.valueOf(it) } catch(e: Exception) { FlowMode.XTLS_RPRX_VISION } } ?: FlowMode.XTLS_RPRX_VISION,
                 fragmentationEnabled = backup.fragmentationEnabled,
-                fragmentationSize = backup.fragmentationSize,
+                fragmentType = backup.fragmentType,
+                fragmentPackets = backup.fragmentPackets,
+                fragmentLength = backup.fragmentLength,
+                fragmentInterval = backup.fragmentInterval,
                 noiseEnabled = backup.noiseEnabled,
-                noiseSize = backup.noiseSize,
+                noiseType = backup.noiseType,
+                noisePacketSize = backup.noisePacketSize,
                 noiseDelay = backup.noiseDelay,
                 mtu = backup.mtu,
-                remark = backup.remark
+                isFavorite = backup.isFavorite,
+                latency = backup.latency
             )
         }
     }
     
     fun exportNodesAsVless(nodes: List<VlessConfig>): String {
-        return nodes.joinToString("\n") { config ->
-            config.toVlessUrl()
-        }
+        // Simple VLESS URL export
+        return nodes.map { config ->
+            buildVlessUrl(config)
+        }.joinToString("\n")
+    }
+    
+    private fun buildVlessUrl(config: VlessConfig): String {
+        val flowParam = if (config.flow != FlowMode.NONE) "&flow=${config.flow.name.lowercase().replace("_", "-")}" else ""
+        return "vless://${config.uuid}@${config.serverAddress}:${config.port}?security=${config.securityMode.name.lowercase()}&sni=${config.sni}&fp=${config.fingerprint}&type=tcp$flowParam#${config.name}"
     }
     
     fun exportNodesAsClash(nodes: List<VlessConfig>): String {
@@ -215,8 +237,8 @@ object BackupManager {
               uuid: ${config.uuid}
               network: tcp
               tls: true
-              flow: ${config.flow ?: ""}
-              servername: ${config.serverAddress}
+              flow: ${if (config.flow != FlowMode.NONE) config.flow.name.lowercase().replace("_", "-") else ""}
+              servername: ${config.sni.ifEmpty { config.serverAddress }}
             """.trimIndent()
         }.joinToString("\n")
         
@@ -248,12 +270,12 @@ object BackupManager {
     
     // QR Code generation (returns content for QR)
     fun generateQrContent(config: VlessConfig): String {
-        return config.toVlessUrl()
+        return buildVlessUrl(config)
     }
     
     // Generate subscription link content
     fun generateSubscriptionContent(nodes: List<VlessConfig>): String {
-        return nodes.map { it.toVlessUrl() }
+        return nodes.map { buildVlessUrl(it) }
             .joinToString("\n")
             .let { android.util.Base64.encodeToString(it.toByteArray(), android.util.Base64.DEFAULT) }
     }
