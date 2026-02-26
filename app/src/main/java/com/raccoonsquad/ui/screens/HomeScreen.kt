@@ -478,10 +478,30 @@ fun HomeScreen(
     
     // Doctor Dialog
     if (showDoctorDialog) {
+        val bruteForceState by viewModel.bruteForceState.collectAsState()
+        
         DoctorDialog(
             activeConfig = activeNode?.config,
             isVpnActive = isVpnActive,
-            onDismiss = { showDoctorDialog = false }
+            bruteForceState = bruteForceState,
+            onBruteForce = {
+                LogManager.i("HomeScreen", "Brute force button clicked! activeId=$activeId")
+                viewModel.bruteForceActiveNode { updatedConfig ->
+                    LogManager.i("HomeScreen", "Brute force reconnecting with config: ${updatedConfig.name}")
+                    // Reconnect VPN with new config
+                    VpnController.stopVpn(context)
+                    viewModel.setActiveNode(null)
+                    GlobalScope.launch {
+                        kotlinx.coroutines.delay(500)
+                        VpnController.startVpn(context, updatedConfig)
+                        viewModel.setActiveNode(updatedConfig.id)
+                    }
+                }
+            },
+            onDismiss = { 
+                showDoctorDialog = false
+                viewModel.resetBruteForceState()
+            }
         )
     }
 }
