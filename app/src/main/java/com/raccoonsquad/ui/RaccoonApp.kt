@@ -13,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.raccoonsquad.App
 import com.raccoonsquad.core.log.LogManager
+import com.raccoonsquad.core.stats.TrafficStats
 import com.raccoonsquad.data.settings.SettingsManager
 import com.raccoonsquad.ui.screens.HomeScreen
 import com.raccoonsquad.ui.screens.LogsScreen
@@ -38,6 +41,9 @@ import com.raccoonsquad.ui.screens.NodeEditorScreen
 import com.raccoonsquad.ui.screens.SettingsScreen
 import com.raccoonsquad.ui.theme.AppTheme
 import com.raccoonsquad.ui.theme.RaccoonSquadTheme
+import com.raccoonsquad.ui.components.SpeedTestScreen
+import com.raccoonsquad.ui.components.SplitTunnelingScreen
+import com.raccoonsquad.ui.components.BackupScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -48,6 +54,9 @@ sealed class Screen(val route: String) {
     object NodeEditor : Screen("node_editor")
     object Logs : Screen("logs")
     object Settings : Screen("settings")
+    object SpeedTest : Screen("speed_test")
+    object SplitTunneling : Screen("split_tunneling")
+    object Backup : Screen("backup")
 }
 
 // Easter egg: Raccoon particles
@@ -168,6 +177,12 @@ fun RaccoonApp(
                             label = { Text("Nodes") }
                         )
                         NavigationBarItem(
+                            selected = navController.currentDestination?.route == Screen.SpeedTest.route,
+                            onClick = { navController.navigate(Screen.SpeedTest.route) },
+                            icon = { Text("🚀") },
+                            label = { Text("Speed") }
+                        )
+                        NavigationBarItem(
                             selected = navController.currentDestination?.route == Screen.Logs.route,
                             onClick = { navController.navigate(Screen.Logs.route) },
                             icon = { Text("📋") },
@@ -212,7 +227,27 @@ fun RaccoonApp(
                     composable(Screen.Settings.route) {
                         SettingsScreen(
                             settingsManager = settingsManager,
+                            onBack = { navController.popBackStack() },
+                            onNavigateToSplitTunneling = { navController.navigate(Screen.SplitTunneling.route) },
+                            onNavigateToBackup = { navController.navigate(Screen.Backup.route) }
+                        )
+                    }
+                    composable(Screen.SpeedTest.route) {
+                        SpeedTestScreen(
+                            onBack = { navController.popBackStack() },
+                            isVpnActive = false // Will be connected from VPN state
+                        )
+                    }
+                    composable(Screen.SplitTunneling.route) {
+                        SplitTunnelingScreen(
                             onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(Screen.Backup.route) {
+                        BackupScreen(
+                            nodeCount = 0, // Will be passed from ViewModel
+                            onBack = { navController.popBackStack() },
+                            onExportNodes = { "" } // Will be connected to ViewModel
                         )
                     }
                 }

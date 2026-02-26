@@ -25,7 +25,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     settingsManager: SettingsManager,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToSplitTunneling: () -> Unit = {},
+    onNavigateToBackup: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val currentTheme by settingsManager.theme.collectAsState(initial = AppTheme.PURPLE)
@@ -65,19 +67,20 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Appearance section
+            // VPN Features section
             item {
                 Text(
-                    "Внешний вид",
+                    "VPN функции",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
             
+            // Split Tunneling
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = { showThemeDialog = true }
+                    onClick = onNavigateToSplitTunneling
                 ) {
                     Row(
                         modifier = Modifier
@@ -87,51 +90,23 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Palette, "Theme", modifier = Modifier.padding(end = 12.dp))
+                            Icon(
+                                Icons.Default.Apps,
+                                "Split Tunneling",
+                                modifier = Modifier.padding(end = 12.dp)
+                            )
                             Column {
-                                Text("Цветовая тема", style = MaterialTheme.typography.bodyLarge)
+                                Text("Split Tunneling", style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    currentTheme.displayName,
+                                    "Выбор приложений через VPN",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                        Icon(Icons.Default.ChevronRight, "Select")
+                        Icon(Icons.Default.ChevronRight, "Open")
                     }
                 }
-            }
-            
-            // Theme preview
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Превью темы", style = MaterialTheme.typography.labelMedium)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            AppTheme.values().take(4).forEach { theme ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(getThemePrimaryColor(theme))
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // VPN section
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "VPN",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
             }
 
             // Kill Switch
@@ -208,6 +183,109 @@ fun SettingsScreen(
                                 }
                             }
                         )
+                    }
+                }
+            }
+            
+            // Appearance section
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Внешний вид",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { showThemeDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Palette, "Theme", modifier = Modifier.padding(end = 12.dp))
+                            Column {
+                                Text("Цветовая тема", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    currentTheme.displayName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, "Select")
+                    }
+                }
+            }
+            
+            // Theme preview
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Превью темы", style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AppTheme.values().take(4).forEach { theme ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(getThemePrimaryColor(theme))
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Data section
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Данные",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            // Backup
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onNavigateToBackup
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.CloudUpload,
+                                "Backup",
+                                modifier = Modifier.padding(end = 12.dp)
+                            )
+                            Column {
+                                Text("Backup & Export", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "Резервное копирование нод",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, "Open")
                     }
                 }
             }
@@ -330,7 +408,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "Version: 1.3.0",
+                            "Version: ${UpdateChecker.CURRENT_VERSION}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -339,7 +417,7 @@ fun SettingsScreen(
                             onClick = {
                                 scope.launch {
                                     isCheckingUpdates = true
-                                    val result = com.raccoonsquad.core.update.UpdateChecker.checkForUpdates()
+                                    val result = UpdateChecker.checkForUpdates()
                                     isCheckingUpdates = false
                                     result.onSuccess { info ->
                                         updateInfo = info
@@ -353,7 +431,7 @@ fun SettingsScreen(
                             enabled = !isCheckingUpdates
                         ) {
                             if (isCheckingUpdates) {
-                                androidx.compose.material3.CircularProgressIndicator(
+                                CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
                                     strokeWidth = 2.dp
                                 )
@@ -406,7 +484,7 @@ fun SettingsScreen(
             confirmButton = {
                 if (updateInfo!!.isUpdateAvailable) {
                     Button(onClick = {
-                        com.raccoonsquad.core.update.UpdateChecker.openDownloadPage(context, updateInfo!!.downloadUrl)
+                        UpdateChecker.openDownloadPage(context, updateInfo!!.downloadUrl)
                         showUpdateDialog = false
                     }) {
                         Text("Скачать")

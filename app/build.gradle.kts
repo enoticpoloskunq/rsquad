@@ -3,6 +3,7 @@ plugins {
     id("com.android.application")
     // Compose Compiler plugin required for Kotlin 2.0+
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
 }
 
 android {
@@ -136,6 +137,7 @@ dependencies {
     
     // JSON
     implementation("com.google.code.gson:gson:2.12.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     
     // VPN Service
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")

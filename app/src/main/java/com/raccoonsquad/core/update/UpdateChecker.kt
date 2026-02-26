@@ -19,8 +19,11 @@ data class UpdateInfo(
 
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
-    private const val GITHUB_REPO = "shrau77/rsquad"
-    private const val CURRENT_VERSION = "1.3.0"
+    private const val GITHUB_REPO = "enoticpoloskunq/rsquad"
+    const val CURRENT_VERSION = "1.4.0"
+    
+    // Public accessor for current version
+    val currentVersion: String get() = CURRENT_VERSION
     
     suspend fun checkForUpdates(): Result<UpdateInfo> = withContext(Dispatchers.IO) {
         try {
