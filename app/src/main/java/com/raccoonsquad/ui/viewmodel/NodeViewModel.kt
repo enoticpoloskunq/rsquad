@@ -452,6 +452,12 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
+    fun updateNode(config: VlessConfig) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateNode(config)
+        }
+    }
+    
     fun deleteNode(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteNode(id)

@@ -107,6 +107,7 @@ fun HomeScreen(
     var showMainMenu by remember { mutableStateOf(false) }  // Overflow menu
     var showCleanMenu by remember { mutableStateOf(false) }  // Clean sub-menu
     var showClearDialog by remember { mutableStateOf(false) }
+    var editingConfig by remember { mutableStateOf<VlessConfig?>(null) }  // Node being edited
     
     var sortOrder by remember { mutableStateOf(SortOrder.FAVORITES_FIRST) }
     
@@ -310,6 +311,17 @@ fun HomeScreen(
                                         showCosmeticDialog = true
                                     }
                                 )
+                                
+                                // Edit active node (only if VPN is active)
+                                if (isVpnActive && activeNode != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("✏️ Редактировать ноду") },
+                                        onClick = {
+                                            showMainMenu = false
+                                            editingConfig = activeNode.config
+                                        }
+                                    )
+                                }
                                 
                                 Divider()
                                 
@@ -638,6 +650,21 @@ fun HomeScreen(
             onDismiss = { 
                 showDoctorDialog = false
                 viewModel.resetBruteForceState()
+            }
+        )
+    }
+    
+    // Node Editor Screen (full screen overlay)
+    if (editingConfig != null) {
+        NodeEditorScreen(
+            config = editingConfig,
+            onBack = { editingConfig = null },
+            onSave = { updatedConfig ->
+                viewModel.updateNode(updatedConfig)
+                editingConfig = null
+                viewModelScope.launch {
+                    snackbarHostState.showSnackbar("✅ Нода сохранена")
+                }
             }
         )
     }
