@@ -409,47 +409,18 @@ fun HomeScreen(
         )
     }
     
-    // Test Dialog
+    // Test Dialog - simplified, only TCP Ping and URL test
     if (showTestDialog) {
-        val bruteForceState by viewModel.bruteForceState.collectAsState()
-        
         TestDialog(
             isAutoTesting = isAutoTesting,
-            isVpnActive = isVpnActive,
             testProgress = testProgress,
-            bruteForceState = bruteForceState,
             onTestAllTcp = {
                 viewModel.testAllNodes(NodeTester.TestMethod.TCP)
-                showTestDialog = false  // Auto-close
-            },
-            onTestUrl = {
-                viewModel.testUrlThroughVpn()
+                showTestDialog = false
             },
             onTestAllUrl = {
-                viewModel.testAllNodesWithUrl()
-                showTestDialog = false  // Auto-close
-            },
-            onTestAllUrlParallel = {
                 viewModel.testAllNodesWithUrlParallel(5)
-                showTestDialog = false  // Auto-close
-            },
-            onTestAllThroughVpn = {
-                viewModel.testAllNodesThroughVpn()
-                showTestDialog = false  // Auto-close
-            },
-            onBruteForce = {
-                LogManager.i("HomeScreen", "Brute force button clicked! activeId=$activeId")
-                viewModel.bruteForceActiveNode { updatedConfig ->
-                    LogManager.i("HomeScreen", "Brute force reconnecting with config: ${updatedConfig.name}")
-                    // Reconnect VPN with new config
-                    VpnController.stopVpn(context)
-                    viewModel.setActiveNode(null)
-                    GlobalScope.launch {
-                        kotlinx.coroutines.delay(500)
-                        VpnController.startVpn(context, updatedConfig)
-                        viewModel.setActiveNode(updatedConfig.id)
-                    }
-                }
+                showTestDialog = false
             },
             onCancelTest = {
                 viewModel.cancelTest()
@@ -459,11 +430,10 @@ fun HomeScreen(
             },
             onSmartClean = {
                 viewModel.smartCleanNodes()
-                showTestDialog = false  // Auto-close
-            },
-            onDismiss = { 
                 showTestDialog = false
-                viewModel.resetBruteForceState()
+            },
+            onDismiss = {
+                showTestDialog = false
             }
         )
     }
@@ -812,23 +782,16 @@ fun ImportDialog(
 @Composable
 fun TestDialog(
     isAutoTesting: Boolean,
-    isVpnActive: Boolean = false,
-    testProgress: Pair<Int, Int> = 0 to 0,  // tested / total
-    bruteForceState: NodeViewModel.BruteForceState = NodeViewModel.BruteForceState.Idle,
+    testProgress: Pair<Int, Int> = 0 to 0,
     onTestAllTcp: () -> Unit,
-    onTestUrl: () -> Unit = {},
-    onTestAllUrl: () -> Unit = {},  // Test all nodes with URL (no VPN needed)
-    onTestAllUrlParallel: () -> Unit = {},  // Parallel URL test (faster)
-    onTestAllThroughVpn: () -> Unit = {},  // Test all nodes through VPN
-    onBruteForce: () -> Unit = {},  // Brute force cosmetics
-    onCancelTest: () -> Unit = {},  // Cancel current test
-    onQuickClean: () -> Unit = {},  // Quick clean - delete failed nodes
-    onSmartClean: () -> Unit = {},  // Smart clean - TCP + URL check
+    onTestAllUrl: () -> Unit,
+    onCancelTest: () -> Unit = {},
+    onQuickClean: () -> Unit = {},
+    onSmartClean: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val (tested, total) = testProgress
-    val isBruteForcing = bruteForceState is NodeViewModel.BruteForceState.Running
-    val isTesting = isAutoTesting || total > 0 || isBruteForcing
+    val isTesting = isAutoTesting || total > 0
     
     AlertDialog(
         onDismissRequest = if (isTesting) { {} } else onDismiss,
@@ -848,56 +811,15 @@ fun TestDialog(
                                 .padding(12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            when (val state = bruteForceState) {
-                                is NodeViewModel.BruteForceState.Running -> {
-                                    Text(
-                                        "🎲 Подбор: ${state.attempt}/${state.maxAttempts}",
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    if (state.strategy.isNotEmpty()) {
-                                        Text(
-                                            state.strategy,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                                }
-                                is NodeViewModel.BruteForceState.Success -> {
-                                    Text(
-                                        "✅ Успех! Попытка ${state.attempt}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = Color(0xFF4CAF50)
-                                    )
-                                    Text("Latency: ${state.latency}ms")
-                                }
-                                is NodeViewModel.BruteForceState.Failed -> {
-                                    Text(
-                                        "❌ Не удалось за ${state.attempts} попыток",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                    if (state.reason.isNotEmpty()) {
-                                        Text(
-                                            state.reason,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                                else -> {
-                                    Text(
-                                        "Тестирование: $tested / $total",
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    LinearProgressIndicator(
-                                        progress = { if (total > 0) tested.toFloat() / total else 0f },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
+                            Text(
+                                "Тестирование: $tested / $total",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { if (total > 0) tested.toFloat() / total else 0f },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = onCancelTest,
@@ -939,73 +861,14 @@ fun TestDialog(
                 )
                 
                 Button(
-                    onClick = onTestAllUrlParallel,
+                    onClick = onTestAllUrl,
                     enabled = !isTesting,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.secondary
                     )
                 ) {
-                    Text("🌐 URL тест (параллельно)")
-                }
-                
-                Button(
-                    onClick = onTestAllUrl,
-                    enabled = !isTesting,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Text("🌐 URL тест (последовательно)")
-                }
-                
-                // Additional VPN tests (only when VPN is active)
-                if (isVpnActive) {
-                    Button(
-                        onClick = onTestUrl,
-                        enabled = !isTesting,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiary
-                        )
-                    ) {
-                        Text("🌐 URL тест текущей ноды")
-                    }
-                    
-                    Button(
-                        onClick = onTestAllThroughVpn,
-                        enabled = !isTesting,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Text("🔄 Тест ВСЕХ через активный VPN")
-                    }
-                    
-                    // Brute force section
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    Text("Подбор косметики:", style = MaterialTheme.typography.labelMedium)
-                    Text(
-                        "Пробует разные настройки маскировки (до 20 попыток)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
-                    
-                    Button(
-                        onClick = {
-                            LogManager.i("TestDialog", "Brute force button onClick triggered")
-                            onBruteForce()
-                        },
-                        enabled = !isTesting,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF9C27B0)
-                        )
-                    ) {
-                        Text("🎲 Подобрать косметику")
-                    }
+                    Text("🌐 URL тест всех нод")
                 }
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -1037,24 +900,27 @@ fun TestDialog(
                     enabled = !isTesting,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFB71C1C)
+                        containerColor = MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
-                    Text("🔍 Полная проверка + очистка")
+                    Text("🧹 Умная очистка")
                 }
                 
                 Text(
-                    "TCP + URL проверка всех нод",
+                    "TCP + URL проверка, удаление нерабочих",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss, enabled = !isTesting) {
-                Text("Готово")
+            if (!isTesting) {
+                TextButton(onClick = onDismiss) {
+                    Text("Закрыть")
+                }
             }
-        }
+        },
+        dismissButton = {}
     )
 }
 
