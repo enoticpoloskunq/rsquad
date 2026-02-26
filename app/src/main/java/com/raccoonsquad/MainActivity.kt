@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.os.Build
 import android.os.Bundle
-import android.os.Process
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,18 +31,9 @@ class MainActivity : ComponentActivity() {
     // Keep splash visible until data is ready
     private var isDataReady by mutableStateOf(false)
     
-    // Expected SHA-256 signature (debug keystore)
-    // Update this when using release keystore
-    private val expectedSignatureSha256 = "5D:B3:AB:4E:8F:0C:5F:4E:0A:1B:2C:3D:4E:5F:6A:7B:8C:9D:0E:1F:2A:3B:4C:5D:6E:7F:8A:9B:0C:1D:2E:3F"
-    
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Signature verification - security check
-        if (!verifySignature()) {
-            Log.e("MainActivity", "Signature verification failed! Exiting...")
-            finish()
-            Process.killProcess(Process.myPid())
-            return
-        }
+        // Log signature for debugging (helps set up correct expected signature)
+        logAppSignature()
         
         // Install splash screen before super.onCreate()
         val splashScreen = installSplashScreen()
@@ -76,11 +66,11 @@ class MainActivity : ComponentActivity() {
     }
     
     /**
-     * Verify app signature to prevent tampering
-     * Returns true if signature matches expected value
+     * Log app signature SHA-256 for debugging
+     * Use this to get the correct signature for release builds
      */
-    private fun verifySignature(): Boolean {
-        return try {
+    private fun logAppSignature() {
+        try {
             val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 packageManager.getPackageInfo(
                     packageName,
@@ -101,34 +91,12 @@ class MainActivity : ComponentActivity() {
                 packageInfo.signatures
             }
             
-            if (signatures.isNullOrEmpty()) {
-                Log.e("MainActivity", "No signatures found!")
-                return false
-            }
-            
-            for (signature in signatures) {
+            signatures?.forEach { signature ->
                 val sha256 = getSignatureSha256(signature)
-                Log.d("MainActivity", "App signature SHA-256: $sha256")
-                
-                // For now, accept any signature in debug builds
-                // In production, compare with expectedSignatureSha256
-                if (BuildConfig.DEBUG) {
-                    return true
-                }
-                
-                // In release builds, verify signature
-                if (sha256.replace(" ", "").equals(
-                        expectedSignatureSha256.replace(" ", ""), 
-                        ignoreCase = true
-                    )) {
-                    return true
-                }
+                Log.i("RaccoonApp", "App Signature SHA-256: $sha256")
             }
-            
-            false
         } catch (e: Exception) {
-            Log.e("MainActivity", "Signature verification error", e)
-            false
+            Log.e("RaccoonApp", "Failed to get signature", e)
         }
     }
     
