@@ -19,7 +19,7 @@ import com.raccoonsquad.data.model.SecurityMode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NodeEditorScreen(
-    config: VlessConfig?,
+    config: VlessConfig? = null,
     onBack: () -> Unit,
     onSave: (VlessConfig) -> Unit
 ) {
@@ -60,7 +60,9 @@ fun NodeEditorScreen(
                     IconButton(onClick = {
                         // Build updated config
                         val updatedConfig = (config ?: VlessConfig(
-                            uuid = java.util.UUID.randomUUID().toString()
+                            uuid = java.util.UUID.randomUUID().toString(),
+                            serverAddress = server.ifEmpty { "example.com" },
+                            port = port.toIntOrNull() ?: 443
                         )).copy(
                             name = name,
                             serverAddress = server,
@@ -227,7 +229,9 @@ fun NodeEditorScreen(
             Button(
                 onClick = {
                     val updatedConfig = (config ?: VlessConfig(
-                        uuid = java.util.UUID.randomUUID().toString()
+                        uuid = java.util.UUID.randomUUID().toString(),
+                        serverAddress = server.ifEmpty { "example.com" },
+                        port = port.toIntOrNull() ?: 443
                     )).copy(
                         name = name,
                         serverAddress = server,
