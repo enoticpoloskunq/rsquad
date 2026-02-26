@@ -840,7 +840,11 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     fun bruteForceActiveNode(onReconnectNeeded: (VlessConfig) -> Unit) {
         val activeConfig = nodes.value.find { it.id == activeNodeId.value }
         if (activeConfig != null) {
+            LogManager.i("ViewModel", "Starting brute force for: ${activeConfig.name}")
             bruteForceCosmetics(activeConfig, onReconnectNeeded)
+        } else {
+            LogManager.w("ViewModel", "bruteForceActiveNode: No active node! activeNodeId=${activeNodeId.value}")
+            _testResult.value = "❌ Сначала выберите и подключите ноду"
         }
     }
     
