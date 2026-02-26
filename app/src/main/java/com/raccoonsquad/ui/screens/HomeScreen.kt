@@ -7,6 +7,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -109,6 +111,11 @@ fun HomeScreen(
     var showCleanMenu by remember { mutableStateOf(false) }  // Clean sub-menu
     var showClearDialog by remember { mutableStateOf(false) }
     var editingConfig by remember { mutableStateOf<VlessConfig?>(null) }  // Node being edited
+    var showDeleteSelectedDialog by remember { mutableStateOf(false) }  // Confirm delete selected
+    
+    // Selection mode state
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     
     var sortOrder by remember { mutableStateOf(SortOrder.FAVORITES_FIRST) }
     
@@ -192,27 +199,80 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = { 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        Text(
-                            text = if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad",
-                            maxLines = 1
-                        )
-                        if (uiStates.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(6.dp))
+                    if (isSelectionMode) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start
+                        ) {
                             Text(
-                                text = "(${uiStates.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = "Выбрано: ${selectedIds.size}",
+                                maxLines = 1,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start
+                        ) {
+                            Text(
+                                text = if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad",
                                 maxLines = 1
                             )
+                            if (uiStates.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "(${uiStates.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                },
+                navigationIcon = {
+                    if (isSelectionMode) {
+                        IconButton(onClick = {
+                            isSelectionMode = false
+                            selectedIds = emptySet()
+                        }) {
+                            Icon(Icons.Default.Close, "Cancel selection")
                         }
                     }
                 },
                 actions = {
-                    if (uiStates.isNotEmpty()) {
+                    if (isSelectionMode) {
+                        // Select all
+                        IconButton(onClick = {
+                            selectedIds = if (selectedIds.size == uiStates.size) {
+                                emptySet()
+                            } else {
+                                uiStates.map { it.id }.toSet()
+                            }
+                        }) {
+                            Icon(
+                                if (selectedIds.size == uiStates.size) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                                "Select all"
+                            )
+                        }
+                        // Delete selected
+                        IconButton(
+                            onClick = {
+                                if (selectedIds.isNotEmpty()) {
+                                    showDeleteSelectedDialog = true
+                                }
+                            },
+                            enabled = selectedIds.isNotEmpty()
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                "Delete selected",
+                                tint = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.error 
+                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (uiStates.isNotEmpty()) {
                         // Sort menu
                         Box {
                             IconButton(onClick = { showSortMenu = true }) {
@@ -326,6 +386,15 @@ fun HomeScreen(
                                 }
                                 
                                 Divider()
+                                
+                                // Selection mode
+                                DropdownMenuItem(
+                                    text = { Text("☑️ Выбрать ноды") },
+                                    onClick = {
+                                        showMainMenu = false
+                                        isSelectionMode = true
+                                    }
+                                )
                                 
                                 // Export
                                 DropdownMenuItem(
@@ -447,17 +516,41 @@ fun HomeScreen(
                         NodeCard(
                             node = node,
                             isTesting = false,
-                            onClick = { onNodeClick(node.config.id) },
-                            onToggle = {
-                                if (node.isActive) {
-                                    VpnController.stopVpn(context)
-                                    viewModel.setActiveNode(null)
+                            isSelected = selectedIds.contains(node.id),
+                            isSelectionMode = isSelectionMode,
+                            onClick = {
+                                if (isSelectionMode) {
+                                    selectedIds = if (selectedIds.contains(node.id)) {
+                                        selectedIds - node.id
+                                    } else {
+                                        selectedIds + node.id
+                                    }
                                 } else {
-                                    connectVpn(activity, node.config, viewModel)
+                                    onNodeClick(node.config.id)
+                                }
+                            },
+                            onLongClick = {
+                                if (!isSelectionMode) {
+                                    isSelectionMode = true
+                                    selectedIds = setOf(node.id)
+                                }
+                            },
+                            onToggle = {
+                                if (!isSelectionMode) {
+                                    if (node.isActive) {
+                                        VpnController.stopVpn(context)
+                                        viewModel.setActiveNode(null)
+                                    } else {
+                                        connectVpn(activity, node.config, viewModel)
+                                    }
                                 }
                             },
                             onTest = { },
-                            onFavorite = { viewModel.toggleFavorite(node.id) }
+                            onFavorite = { 
+                                if (!isSelectionMode) {
+                                    viewModel.toggleFavorite(node.id)
+                                }
+                            }
                         )
                     }
                     
@@ -608,6 +701,34 @@ fun HomeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
+            }
+        )
+    }
+    
+    // Delete Selected Dialog
+    if (showDeleteSelectedDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteSelectedDialog = false },
+            title = { Text("Удалить выбранные?") },
+            text = { Text("Удалить ${selectedIds.size} выбранных нод?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedIds.forEach { viewModel.deleteNode(it) }
+                        showDeleteSelectedDialog = false
+                        isSelectionMode = false
+                        selectedIds = emptySet()
+                        scope.launch {
+                            snackbarHostState.showSnackbar("🗑️ Удалено ${selectedIds.size} нод")
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Удалить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteSelectedDialog = false }) { Text("Отмена") }
             }
         )
     }
@@ -1071,33 +1192,30 @@ fun TestDialog(
 fun NodeCard(
     node: NodeUiState,
     isTesting: Boolean,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     onToggle: () -> Unit,
     onTest: () -> Unit,
     onFavorite: () -> Unit
 ) {
-    // Animate background color when active state changes
+    // Animate background color when active or selected state changes
     val backgroundColor by animateColorAsState(
-        targetValue = if (node.isActive) 
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-        else 
-            MaterialTheme.colorScheme.surface,
+        targetValue = when {
+            isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+            node.isActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else -> MaterialTheme.colorScheme.surface
+        },
         animationSpec = tween(300),
         label = "bgColor"
     )
     
     // Animate elevation when active
     val elevation by animateDpAsState(
-        targetValue = if (node.isActive) 4.dp else 1.dp,
+        targetValue = if (node.isActive || isSelected) 4.dp else 1.dp,
         animationSpec = tween(300),
         label = "elevation"
-    )
-    
-    // Animate scale for active node
-    val scale by animateDpAsState(
-        targetValue = if (node.isActive) 0.dp else 0.dp,
-        animationSpec = tween(150),
-        label = "scale"
     )
     
     // Stable colors calculated once
@@ -1112,7 +1230,10 @@ fun NodeCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(64.dp)
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
         elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         shape = MaterialTheme.shapes.small
@@ -1123,6 +1244,15 @@ fun NodeCard(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Selection checkbox (only visible in selection mode)
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() },
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+            }
+            
             // Main content
             Column(modifier = Modifier.weight(1f)) {
                 // Line 1: Status + Name + Ping
@@ -1176,39 +1306,43 @@ fun NodeCard(
                 }
             }
             
-            // Favorite button
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clickable { onFavorite() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (node.isFavorite) "⭐" else "☆",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (node.isFavorite) 
-                        Color(0xFFFFC107) 
-                    else 
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
+            // Favorite button (hidden in selection mode)
+            if (!isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clickable { onFavorite() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (node.isFavorite) "⭐" else "☆",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (node.isFavorite) 
+                            Color(0xFFFFC107) 
+                        else 
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
             }
             
-            // Connect/Disconnect button with animation
-            Box(
-                modifier = Modifier
-                    .padding(start = 4.dp)
-                    .size(36.dp)
-                    .clickable { onToggle() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (node.isActive) "⏹" else "▶",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (node.isActive) 
-                        MaterialTheme.colorScheme.error 
-                    else 
-                        MaterialTheme.colorScheme.primary
-                )
+            // Connect/Disconnect button (hidden in selection mode)
+            if (!isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .size(36.dp)
+                        .clickable { onToggle() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (node.isActive) "⏹" else "▶",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (node.isActive) 
+                            MaterialTheme.colorScheme.error 
+                        else 
+                            MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
