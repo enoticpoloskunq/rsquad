@@ -760,7 +760,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         testJob = viewModelScope.launch {
             val maxAttempts = 10  // Reduced from 20 since we use smart strategies
             var currentConfig = config
-            var lastError: String? = null
+            lastBruteForceError = null  // Reset error before starting
 
             // Check if node is completely dead first (dead server, not DPI)
             if (BruteForceStrategies.isNodeDead(config)) {
@@ -817,7 +817,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             // All attempts failed - provide diagnosis
-            val diagnosis = BruteForceStrategies.diagnoseError(lastError, config)
+            val diagnosis = BruteForceStrategies.diagnoseError(lastBruteForceError, config)
             _bruteForceState.value = BruteForceState.Failed(maxAttempts, diagnosis)
             testJob = null
         }
@@ -853,6 +853,9 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                 
                 Pair(success, if (success) latency else 0L)
             } catch (e: Exception) {
+                // Save error for diagnosis
+                lastBruteForceError = e.message
+                
                 // Update failure stats
                 val updatedConfig = config.copy(
                     connectionFails = config.connectionFails + 1,
@@ -865,6 +868,9 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+    
+    // Store last error for diagnosis
+    private var lastBruteForceError: String? = null
     
     fun resetBruteForceState() {
         _bruteForceState.value = BruteForceState.Idle
