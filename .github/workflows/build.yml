@@ -111,10 +111,19 @@ jobs:
           ## 🦝 Raccoon Squad ${{ github.ref_name }}
           
           ### Скачать
-          - **raccoon-squad-arm64-release.apk** - для большинства современных устройств
-          - **raccoon-squad-armeabi-release.apk** - для старых 32-битных устройств
-          - **raccoon-squad-arm64-debug.apk** - debug версия для arm64
-          - **raccoon-squad-armeabi-debug.apk** - debug версия для armeabi
+          | Файл | Описание |
+          |------|----------|
+          | `raccoon-squad-arm64-release.apk` | **Рекомендуется** - для большинства современных устройств |
+          | `raccoon-squad-armeabi-release.apk` | Для старых 32-битных устройств |
+          | `raccoon-squad-arm64-debug.apk` | Debug версия для arm64 |
+          | `raccoon-squad-armeabi-debug.apk` | Debug версия для armeabi |
+          
+          ### Новое в этой версии
+          - 🛡️ Kill Switch - блокировка интернета при обрыве VPN
+          - 🔄 Auto-reconnect - автоматическое переподключение
+          - ✈️ Pre-flight check - проверка нод перед подключением
+          - 🔐 Signature verification - защита от пересборки
+          - 🚀 R8 obfuscation - код обфусцирован и минифицирован
           
           ### Изменения
           См. [README](https://github.com/shrau77/rsquad#версии)

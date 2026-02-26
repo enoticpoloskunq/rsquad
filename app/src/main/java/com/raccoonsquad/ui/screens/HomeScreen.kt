@@ -42,6 +42,7 @@ import com.raccoonsquad.ui.viewmodel.NodeViewModel
 import com.raccoonsquad.ui.viewmodel.NodeUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -437,9 +438,25 @@ fun HomeScreen(
                 isCheckingIp = isCheckingIp,
                 onConnect = {
                     if (uiStates.isNotEmpty()) {
-                        // Auto-select best node: working + highest rating + favorites first
-                        val bestNode = selectBestNode(uiStates)
-                        connectVpn(activity, bestNode.config, viewModel)
+                        // Pre-flight check: select best node with URL test verification
+                        scope.launch {
+                            val bestNode = selectBestNodeWithPreflight(uiStates)
+                            if (bestNode != null) {
+                                connectVpn(activity, bestNode.config, viewModel)
+                                
+                                // Post-connect verification after 3 seconds
+                                delay(3000)
+                                
+                                if (RaccoonVpnService.isActive) {
+                                    val trafficOk = verifyVpnTraffic()
+                                    if (!trafficOk) {
+                                        LogManager.w("HomeScreen", "VPN traffic not passing, triggering auto-fix...")
+                                        // Traffic not passing - VPN service will handle auto-reconnect with cosmetics
+                                        // via the connection monitor in RaccoonVpnService
+                                    }
+                                }
+                            }
+                        }
                     }
                 },
                 onDisconnect = {
@@ -799,18 +816,20 @@ fun HomeScreen(
 }
 
 /**
- * Select the best node for auto-connect
+ * Select the best node for auto-connect with pre-flight check
  * Priority:
  * 1. Working nodes (latency > 0) are preferred over untested/failed
  * 2. Favorites are preferred among working nodes
  * 3. Higher rating score wins
  * 4. Lower latency wins as tiebreaker
+ * 
+ * Pre-flight: URL test the top candidates to verify actual connectivity
  */
-private fun selectBestNode(nodes: List<NodeUiState>): NodeUiState {
-    return nodes.sortedWith(
+private suspend fun selectBestNodeWithPreflight(nodes: List<NodeUiState>): NodeUiState? {
+    // Sort by priority first
+    val sortedNodes = nodes.sortedWith(
         compareBy<NodeUiState> { node ->
             // Priority 1: Working status
-            // Working (latency > 0) = 0, Untested (latency = null) = 1, Failed (latency < 0) = 2
             when {
                 node.latency != null && node.latency > 0 -> 0  // Working - best
                 node.latency == null -> 1  // Untested - medium
@@ -829,7 +848,65 @@ private fun selectBestNode(nodes: List<NodeUiState>): NodeUiState {
             // Priority 4: Latency (lower is better, null = max value)
             node.latency ?: Long.MAX_VALUE
         }
-    ).first()
+    )
+    
+    // Pre-flight check: test top 3 candidates with URL test
+    // Return first one that passes
+    val candidates = sortedNodes.take(3)
+    
+    for (candidate in candidates) {
+        // Quick URL test through Xray (not through VPN)
+        val (latency, error) = com.raccoonsquad.core.xray.XrayWrapper.testConfigWithError(candidate.config)
+        
+        if (latency > 0) {
+            LogManager.i("HomeScreen", "Pre-flight passed for ${candidate.name}: ${latency}ms")
+            return candidate
+        } else {
+            LogManager.w("HomeScreen", "Pre-flight failed for ${candidate.name}: $error")
+        }
+    }
+    
+    // If none passed, return the first one anyway (might still work)
+    LogManager.w("HomeScreen", "Pre-flight failed for all candidates, using first sorted node")
+    return sortedNodes.firstOrNull()
+}
+
+/**
+ * Verify VPN traffic is passing after connection
+ * Returns true if traffic passes, false if blocked
+ */
+private suspend fun verifyVpnTraffic(): Boolean {
+    return withContext(Dispatchers.IO) {
+        try {
+            val proxy = java.net.Proxy(
+                java.net.Proxy.Type.HTTP,
+                java.net.InetSocketAddress("127.0.0.1", 10809)
+            )
+            
+            val client = okhttp3.OkHttpClient.Builder()
+                .proxy(proxy)
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            
+            val request = okhttp3.Request.Builder()
+                .url("https://www.google.com/generate_204")
+                .get()
+                .build()
+            
+            val startTime = System.currentTimeMillis()
+            val response = client.newCall(request).execute()
+            val latency = System.currentTimeMillis() - startTime
+            
+            val success = response.isSuccessful || response.code == 204
+            LogManager.i("HomeScreen", "VPN traffic check: ${if (success) "OK" else "FAIL"} (${latency}ms, code=${response.code})")
+            
+            success && latency < 10000 // Must respond within 10 seconds
+        } catch (e: Exception) {
+            LogManager.e("HomeScreen", "VPN traffic check failed", e)
+            false
+        }
+    }
 }
 
 private fun connectVpn(

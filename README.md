@@ -2,6 +2,17 @@
 
 Android VPN клиент на базе Xray-core с поддержкой VLESS, Reality и продвинутыми функциями обхода блокировок.
 
+## 📥 Скачать
+
+| Версия | Архитектура | Скачать |
+|--------|-------------|---------|
+| **Release** | arm64-v8a (большинство устройств) | [raccoon-squad-arm64-release.apk](../../releases/download/v1.2.0/raccoon-squad-arm64-release.apk) |
+| **Release** | armeabi-v7a (старые устройства) | [raccoon-squad-armeabi-release.apk](../../releases/download/v1.2.0/raccoon-squad-armeabi-release.apk) |
+| **Debug** | arm64-v8a | [raccoon-squad-arm64-debug.apk](../../releases/download/v1.2.0/raccoon-squad-arm64-debug.apk) |
+| **Debug** | armeabi-v7a | [raccoon-squad-armeabi-debug.apk](../../releases/download/v1.2.0/raccoon-squad-armeabi-debug.apk) |
+
+> **Рекомендуется**: Release версия для arm64-v8a
+
 ## Возможности
 
 ### Основное
@@ -19,8 +30,10 @@ Android VPN клиент на базе Xray-core с поддержкой VLESS, 
 - ✅ **Kill Switch** - блокировка интернета при обрыве VPN
 - ✅ **Auto-reconnect** - автоматическое переподключение (до 5 попыток)
 - ✅ **Smart Rating** - рейтинг нод по скорости и стабильности
+- ✅ **Signature Check** - защита от пересборки
 
 ### Удобство
+- ✅ **Pre-flight Check** - проверка нод перед подключением
 - ✅ **Auto-select** - автоматический выбор лучшей ноды
 - ✅ **Country Flags** - определение страны по адресу сервера
 - ✅ **Тестирование** - TCP ping и URL тест для всех нод
@@ -28,16 +41,6 @@ Android VPN клиент на базе Xray-core с поддержкой VLESS, 
 - ✅ **Экспорт** - экспорт нод в буфер обмена
 - ✅ **Проверка обновлений** - уведомления о новых версиях
 - ✅ **Developer Mode** - расширенные логи для отладки
-
-## Скачивание
-
-### Release версия (рекомендуется)
-Скачай APK для твоей архитектуры:
-- **[arm64-v8a](../../releases/latest)** - большинство современных устройств
-- **[armeabi-v7a](../../releases/latest)** - старые 32-битные устройства
-
-### Debug версия
-Доступна в [Actions](../../actions) → выбираешь последний билд → Artifacts
 
 ## Скриншоты
 
@@ -60,7 +63,7 @@ curl -L -o app/libs/libv2ray.aar \
 # Собрать Debug APK
 ./gradlew assembleDebug
 
-# Собрать Release APK
+# Собрать Release APK (obfuscated, minified)
 ./gradlew assembleRelease
 ```
 
@@ -72,9 +75,16 @@ curl -L -o app/libs/libv2ray.aar \
 
 | Версия | Изменения |
 |--------|-----------|
-| 1.2.0 | Kill Switch, Auto-reconnect, Auto-select, Country Flags |
+| 1.2.0 | Kill Switch, Auto-reconnect, Pre-flight check, Signature verification |
 | 1.1.0 | Brute Force косметика, Smart Rating |
 | 1.0.0 | Базовый VLESS + Reality |
+
+## Безопасность
+- **Obfuscation**: R8 full mode с ProGuard правилами
+- **Minification**: Код минифицирован в release сборке
+- **Signature Check**: Приложение закрывается при несовпадении подписи
+- **No External Storage**: Не требует разрешений для внешнего хранилища
+- **Debug Disabled**: Релизные сборки не отлаживаемые
 
 ## License
 MIT
