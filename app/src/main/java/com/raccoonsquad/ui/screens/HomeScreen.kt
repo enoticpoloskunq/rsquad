@@ -1584,6 +1584,14 @@ fun NodeCard(
     }
 }
 
+// Data class for cosmetic presets
+private data class CosmeticPreset(
+    val id: String,
+    val name: String,
+    val description: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)
+
 @Composable
 fun CosmeticDialog(
     onDismiss: () -> Unit,
@@ -1592,10 +1600,10 @@ fun CosmeticDialog(
 ) {
     // Presets with icons instead of emojis
     val presets = listOf(
-        Triple("minimal", "Minimal", "No masking", Icons.Default.Shield),
-        Triple("mobile", "Mobile Optimized", "For mobile networks", Icons.Default.NetworkCell),
-        Triple("tspu", "Anti-TSPU", "DPI bypass for Russia", Icons.Default.Security),
-        Triple("maximum", "Maximum", "Maximum masking", Icons.Default.Bolt)
+        CosmeticPreset("minimal", "Minimal", "No masking", Icons.Default.Shield),
+        CosmeticPreset("mobile", "Mobile Optimized", "For mobile networks", Icons.Default.NetworkCell),
+        CosmeticPreset("tspu", "Anti-TSPU", "DPI bypass for Russia", Icons.Default.Security),
+        CosmeticPreset("maximum", "Maximum", "Maximum masking", Icons.Default.Bolt)
     )
     
     AlertDialog(
@@ -1617,7 +1625,7 @@ fun CosmeticDialog(
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                presets.forEach { (id, name, desc, icon) ->
+                presets.forEach { (id, name, description, icon) ->
                     Surface(
                         onClick = { onApplyPreset(id) },
                         modifier = Modifier.fillMaxWidth(),
@@ -1640,7 +1648,7 @@ fun CosmeticDialog(
                             Column {
                                 Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                                 Text(
-                                    desc,
+                                    description,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

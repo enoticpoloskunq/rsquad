@@ -170,6 +170,172 @@ object CountryFlags {
             address.contains("italy") ||
             address.contains("milan") -> "IT"
             
+            // Portugal
+            address.contains(".pt") ||
+            address.contains("portugal") ||
+            address.contains("lisbon") -> "PT"
+            
+            // Ireland
+            address.contains(".ie") ||
+            address.contains("ireland") ||
+            address.contains("dublin") -> "IE"
+            
+            // Denmark
+            address.contains(".dk") ||
+            address.contains("denmark") ||
+            address.contains("copenhagen") -> "DK"
+            
+            // Norway
+            address.contains(".no") ||
+            address.contains("norway") ||
+            address.contains("oslo") -> "NO"
+            
+            // Latvia
+            address.contains(".lv") ||
+            address.contains("latvia") ||
+            address.contains("riga") -> "LV"
+            
+            // Lithuania
+            address.contains(".lt") ||
+            address.contains("lithuania") ||
+            address.contains("vilnius") -> "LT"
+            
+            // Estonia
+            address.contains(".ee") ||
+            address.contains("estonia") ||
+            address.contains("tallinn") -> "EE"
+            
+            // Bulgaria
+            address.contains(".bg") ||
+            address.contains("bulgaria") ||
+            address.contains("sofia") -> "BG"
+            
+            // Hungary
+            address.contains(".hu") ||
+            address.contains("hungary") ||
+            address.contains("budapest") -> "HU"
+            
+            // Greece
+            address.contains(".gr") ||
+            address.contains("greece") ||
+            address.contains("athens") -> "GR"
+            
+            // Croatia
+            address.contains(".hr") ||
+            address.contains("croatia") ||
+            address.contains("zagreb") -> "HR"
+            
+            // Serbia
+            address.contains(".rs") ||
+            address.contains("serbia") ||
+            address.contains("belgrade") -> "RS"
+            
+            // Slovakia
+            address.contains(".sk") ||
+            address.contains("slovakia") ||
+            address.contains("bratislava") -> "SK"
+            
+            // Slovenia
+            address.contains(".si") ||
+            address.contains("slovenia") ||
+            address.contains("ljubljana") -> "SI"
+            
+            // Luxembourg
+            address.contains(".lu") ||
+            address.contains("luxembourg") -> "LU"
+            
+            // Mexico
+            address.contains(".mx") ||
+            address.contains("mexico") -> "MX"
+            
+            // Brazil
+            address.contains(".br") ||
+            address.contains("brazil") ||
+            address.contains("saopaulo") ||
+            address.contains("sao-paulo") -> "BR"
+            
+            // Argentina
+            address.contains(".ar") ||
+            address.contains("argentina") ||
+            address.contains("buenos-aires") -> "AR"
+            
+            // Chile
+            address.contains(".cl") ||
+            address.contains("chile") ||
+            address.contains("santiago") -> "CL"
+            
+            // Colombia
+            address.contains(".co") ||
+            address.contains("colombia") -> "CO"
+            
+            // South Africa
+            address.contains(".za") ||
+            address.contains("southafrica") ||
+            address.contains("south-africa") ||
+            address.contains("johannesburg") -> "ZA"
+            
+            // Israel
+            address.contains(".il") ||
+            address.contains("israel") ||
+            address.contains("tel-aviv") -> "IL"
+            
+            // UAE
+            address.contains(".ae") ||
+            address.contains("dubai") ||
+            address.contains("uae") -> "AE"
+            
+            // Saudi Arabia
+            address.contains(".sa") ||
+            address.contains("saudi") ||
+            address.contains("riyadh") -> "SA"
+            
+            // India
+            address.contains(".in") ||
+            address.contains("india") ||
+            address.contains("mumbai") ||
+            address.contains("delhi") -> "IN"
+            
+            // South Korea
+            address.contains(".kr") ||
+            address.contains("korea") ||
+            address.contains("seoul") -> "KR"
+            
+            // Taiwan
+            address.contains(".tw") ||
+            address.contains("taiwan") ||
+            address.contains("taipei") -> "TW"
+            
+            // Vietnam
+            address.contains(".vn") ||
+            address.contains("vietnam") ||
+            address.contains("hanoi") -> "VN"
+            
+            // Thailand
+            address.contains(".th") ||
+            address.contains("thailand") ||
+            address.contains("bangkok") -> "TH"
+            
+            // Malaysia
+            address.contains(".my") ||
+            address.contains("malaysia") ||
+            address.contains("kuala-lumpur") -> "MY"
+            
+            // Indonesia
+            address.contains(".id") ||
+            address.contains("indonesia") ||
+            address.contains("jakarta") -> "ID"
+            
+            // Philippines
+            address.contains(".ph") ||
+            address.contains("philippines") ||
+            address.contains("manila") -> "PH"
+            
+            // New Zealand
+            address.contains(".nz") ||
+            address.contains("newzealand") ||
+            address.contains("new-zealand") ||
+            address.contains("auckland") -> "NZ"
+            
             // Unknown
             else -> ""
         }
@@ -211,6 +377,39 @@ object CountryFlags {
             "CZ" -> "Чехия"
             "ES" -> "Испания"
             "IT" -> "Италия"
+            "PT" -> "Португалия"
+            "IE" -> "Ирландия"
+            "DK" -> "Дания"
+            "NO" -> "Норвегия"
+            "LV" -> "Латвия"
+            "LT" -> "Литва"
+            "EE" -> "Эстония"
+            "BG" -> "Болгария"
+            "HU" -> "Венгрия"
+            "GR" -> "Греция"
+            "HR" -> "Хорватия"
+            "RS" -> "Сербия"
+            "SK" -> "Словакия"
+            "SI" -> "Словения"
+            "LU" -> "Люксембург"
+            "MX" -> "Мексика"
+            "BR" -> "Бразилия"
+            "AR" -> "Аргентина"
+            "CL" -> "Чили"
+            "CO" -> "Колумбия"
+            "ZA" -> "ЮАР"
+            "IL" -> "Израиль"
+            "AE" -> "ОАЭ"
+            "SA" -> "Саудовская Аравия"
+            "IN" -> "Индия"
+            "KR" -> "Южная Корея"
+            "TW" -> "Тайвань"
+            "VN" -> "Вьетнам"
+            "TH" -> "Таиланд"
+            "MY" -> "Малайзия"
+            "ID" -> "Индонезия"
+            "PH" -> "Филиппины"
+            "NZ" -> "Новая Зеландия"
             else -> "Неизвестно"
         }
     }
