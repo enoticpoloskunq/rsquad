@@ -138,6 +138,8 @@ fun HomeScreen(
             hasNoise = config.noiseEnabled,
             mtu = config.mtu,
             isFavorite = config.isFavorite,
+            ratingScore = config.calculateScore(),
+            ratingStars = config.getRatingStars(),
             config = config
         )
     }.let { list ->
@@ -1137,13 +1139,26 @@ fun NodeCard(
                     )
                 }
                 
-                // Line 2: Server address
-                Text(
-                    text = node.server,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
+                // Line 2: Server address + Rating
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = node.server,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    // Rating stars
+                    if (node.ratingStars > 0) {
+                        Text(
+                            text = "⭐".repeat(node.ratingStars),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
             }
             
             // Favorite button

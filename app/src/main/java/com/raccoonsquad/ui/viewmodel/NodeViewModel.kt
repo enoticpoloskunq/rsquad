@@ -36,6 +36,8 @@ data class NodeUiState(
     val hasNoise: Boolean,
     val mtu: String,
     val isFavorite: Boolean = false,
+    val ratingScore: Int = 0,        // 0-100 smart rating
+    val ratingStars: Int = 0,         // 1-5 stars
     val config: VlessConfig
 )
 
@@ -998,6 +1000,8 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             hasNoise = config.noiseEnabled,
             mtu = config.mtu,
             isFavorite = config.isFavorite,
+            ratingScore = config.calculateScore(),
+            ratingStars = config.getRatingStars(),
             config = config
         )
     }
