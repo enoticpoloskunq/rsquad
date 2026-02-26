@@ -15,24 +15,21 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-    
-    # Gradle cache - significantly speeds up builds
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 9.3.1
-        cache-read-only: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
-    
-    # Cache Gradle dependencies
+
     - name: Cache Gradle packages
       uses: actions/cache@v4
       with:
@@ -40,62 +37,56 @@ jobs:
           ~/.gradle/caches
           ~/.gradle/wrapper
           ~/.android/build-cache
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/gradle.properties') }}
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
-    
-    # Cache libv2ray.aar to avoid re-downloading
+
     - name: Cache libv2ray.aar
       id: cache-libv2ray
       uses: actions/cache@v4
       with:
         path: app/libs/libv2ray.aar
-        key: libv2ray-aar-${{ hashFiles('app/libs/classes.jar') }}
-        restore-keys: |
-          libv2ray-aar-
-    
+        key: libv2ray-aar-latest
+
     - name: Create libs directory
       run: mkdir -p app/libs
-    
+
     - name: Download libv2ray.aar
       if: steps.cache-libv2ray.outputs.cache-hit != 'true'
       run: |
         curl -L -o app/libs/libv2ray.aar \
           "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
-        echo "Downloaded libv2ray.aar:"
-        ls -lh app/libs/
-    
+
     - name: Build Debug APKs
       run: gradle assembleDebug --no-daemon
-    
+
     - name: Upload arm64-v8a Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: raccoon-squad-arm64-debug
         path: app/build/outputs/apk/debug/*arm64-v8a*.apk
-    
+
     - name: Upload armeabi-v7a Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: raccoon-squad-armeabi-debug
         path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
-    
+
     - name: Build Release APKs
       run: gradle assembleRelease --no-daemon
-    
+
     - name: Upload arm64-v8a Release APK
       uses: actions/upload-artifact@v4
       with:
         name: raccoon-squad-arm64-release
         path: app/build/outputs/apk/release/*arm64-v8a*.apk
-    
+
     - name: Upload armeabi-v7a Release APK
       uses: actions/upload-artifact@v4
       with:
         name: raccoon-squad-armeabi-release
         path: app/build/outputs/apk/release/*armeabi-v7a*.apk
-    
-    # Rename APKs for release
+
     - name: Prepare Release APKs
       if: startsWith(github.ref, 'refs/tags/')
       run: |
@@ -105,7 +96,7 @@ jobs:
         cp app/build/outputs/apk/debug/*arm64-v8a*.apk release/raccoon-squad-arm64-debug.apk
         cp app/build/outputs/apk/debug/*armeabi-v7a*.apk release/raccoon-squad-armeabi-debug.apk
         ls -la release/
-    
+
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
@@ -113,26 +104,19 @@ jobs:
         name: Raccoon Squad ${{ github.ref_name }}
         body: |
           ## 🦝 Raccoon Squad ${{ github.ref_name }}
-          
+
           ### Скачать
           | Файл | Описание |
           |------|----------|
           | `raccoon-squad-arm64-release.apk` | **Рекомендуется** - для большинства современных устройств |
           | `raccoon-squad-armeabi-release.apk` | Для старых 32-битных устройств |
-          | `raccoon-squad-arm64-debug.apk` | Debug версия для arm64 |
-          | `raccoon-squad-armeabi-debug.apk` | Debug версия для armeabi |
-          
-          ### Новое в этой версии
-          - 🛡️ Kill Switch - блокировка интернета при обрыве VPN
-          - 🔄 Auto-reconnect - автоматическое переподключение
-          - ✈️ Pre-flight check - проверка нод перед подключением
-          - 🔐 Signature verification - защита от пересборки
-          - 🚀 R8 obfuscation - код обфусцирован и минифицирован
-          
-          ### Изменения
-          См. [README](https://github.com/shrau77/rsquad#версии)
+
+          ### Особенности
+          - 🛡️ Kill Switch
+          - 🔄 Auto-reconnect
+          - 🌍 56 стран
+          - ✈️ Pre-flight check
+          - 🚀 R8 обфускация
         files: release/*.apk
-        draft: false
-        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
