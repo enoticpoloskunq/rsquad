@@ -139,6 +139,7 @@ fun HomeScreen(
     
     // Create UI states - simple mapping without derivedStateOf to ensure updates
     val uiStates = nodes.take(visibleNodeCount).mapIndexed { index, config -> 
+        val countryCode = com.raccoonsquad.core.util.CountryFlags.detectCountry(config.serverAddress)
         NodeUiState(
             id = config.id,
             index = index,
@@ -153,6 +154,8 @@ fun HomeScreen(
             isFavorite = config.isFavorite,
             ratingScore = config.calculateScore(),
             ratingStars = config.getRatingStars(),
+            countryFlag = com.raccoonsquad.core.util.CountryFlags.getFlag(countryCode),
+            countryName = com.raccoonsquad.core.util.CountryFlags.getCountryName(countryCode),
             config = config
         )
     }.let { list ->
@@ -1255,7 +1258,7 @@ fun NodeCard(
             
             // Main content
             Column(modifier = Modifier.weight(1f)) {
-                // Line 1: Status + Name + Ping
+                // Line 1: Status + Flag + Name + Ping
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Animated status indicator
                     Text(
@@ -1264,6 +1267,11 @@ fun NodeCard(
                         modifier = Modifier.graphicsLayer {
                             alpha = if (node.isActive) 1f else 0.6f
                         }
+                    )
+                    // Country flag
+                    Text(
+                        text = " ${node.countryFlag}",
+                        style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
                         text = " ${node.name}",

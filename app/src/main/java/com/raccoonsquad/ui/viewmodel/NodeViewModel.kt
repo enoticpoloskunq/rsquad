@@ -38,6 +38,8 @@ data class NodeUiState(
     val isFavorite: Boolean = false,
     val ratingScore: Int = 0,        // 0-100 smart rating
     val ratingStars: Int = 0,         // 1-5 stars
+    val countryFlag: String = "🌐",   // Emoji flag
+    val countryName: String = "",     // Country name in Russian
     val config: VlessConfig
 )
 
@@ -1026,6 +1028,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun toUiState(config: VlessConfig, activeId: String?, index: Int): NodeUiState {
+        val countryCode = com.raccoonsquad.core.util.CountryFlags.detectCountry(config.serverAddress)
         return NodeUiState(
             id = config.id,
             index = index,
@@ -1040,7 +1043,35 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             isFavorite = config.isFavorite,
             ratingScore = config.calculateScore(),
             ratingStars = config.getRatingStars(),
+            countryFlag = com.raccoonsquad.core.util.CountryFlags.getFlag(countryCode),
+            countryName = com.raccoonsquad.core.util.CountryFlags.getCountryName(countryCode),
             config = config
         )
+    }
+    
+    /**
+     * Get the best node for auto-connection
+     * Priority: Working nodes > Favorites > Best rating
+     */
+    fun getBestNode(): VlessConfig? {
+        val allNodes = nodes.value
+        if (allNodes.isEmpty()) return null
+        
+        // Filter working nodes (latency > 0 means tested and working)
+        val workingNodes = allNodes.filter { node ->
+            node.latency != null && node.latency > 0
+        }
+        
+        // If no tested nodes, return first favorite or first node
+        if (workingNodes.isEmpty()) {
+            return allNodes.firstOrNull { it.isFavorite } ?: allNodes.first()
+        }
+        
+        // Sort working nodes by: favorite first, then by score (descending), then by latency (ascending)
+        return workingNodes.sortedWith(
+            compareByDescending<VlessConfig> { it.isFavorite }
+                .thenByDescending { it.calculateScore() }
+                .thenBy { it.latency ?: Long.MAX_VALUE }
+        ).first()
     }
 }
