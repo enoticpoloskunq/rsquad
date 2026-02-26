@@ -6,10 +6,10 @@ Android VPN клиент на базе Xray-core с поддержкой VLESS, 
 
 | Версия | Архитектура | Скачать |
 |--------|-------------|---------|
-| **Release** | arm64-v8a (большинство устройств) | [raccoon-squad-arm64-release.apk](../../releases/download/v1.2.0/raccoon-squad-arm64-release.apk) |
-| **Release** | armeabi-v7a (старые устройства) | [raccoon-squad-armeabi-release.apk](../../releases/download/v1.2.0/raccoon-squad-armeabi-release.apk) |
-| **Debug** | arm64-v8a | [raccoon-squad-arm64-debug.apk](../../releases/download/v1.2.0/raccoon-squad-arm64-debug.apk) |
-| **Debug** | armeabi-v7a | [raccoon-squad-armeabi-debug.apk](../../releases/download/v1.2.0/raccoon-squad-armeabi-debug.apk) |
+| **Release** | arm64-v8a (большинство устройств) | [raccoon-squad-arm64-release.apk](../../releases/download/v1.3.0/raccoon-squad-arm64-release.apk) |
+| **Release** | armeabi-v7a (старые устройства) | [raccoon-squad-armeabi-release.apk](../../releases/download/v1.3.0/raccoon-squad-armeabi-release.apk) |
+| **Debug** | arm64-v8a | [raccoon-squad-arm64-debug.apk](../../releases/download/v1.3.0/raccoon-squad-arm64-debug.apk) |
+| **Debug** | armeabi-v7a | [raccoon-squad-armeabi-debug.apk](../../releases/download/v1.3.0/raccoon-squad-armeabi-debug.apk) |
 
 > **Рекомендуется**: Release версия для arm64-v8a
 
@@ -75,6 +75,7 @@ curl -L -o app/libs/libv2ray.aar \
 
 | Версия | Изменения |
 |--------|-----------|
+| 1.3.0 | UI/UX Redesign: Material Icons, professional look, English UI |
 | 1.2.0 | Kill Switch, Auto-reconnect, Pre-flight check, Signature verification |
 | 1.1.0 | Brute Force косметика, Smart Rating |
 | 1.0.0 | Базовый VLESS + Reality |
