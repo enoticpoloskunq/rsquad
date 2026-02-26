@@ -28,7 +28,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raccoonsquad.core.vpn.RaccoonVpnService
 import com.raccoonsquad.core.util.NodeTester
@@ -116,6 +115,7 @@ fun HomeScreen(
     val clipboardManager = LocalClipboardManager.current
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     
     // Simple state - just track if we've shown nodes at least once
     var hasLoadedNodes by remember { mutableStateOf(false) }
@@ -336,11 +336,11 @@ fun HomeScreen(
                                         val count = viewModel.getExportCount()
                                         if (count > 0) {
                                             clipboardManager.setText(AnnotatedString(exportedText))
-                                            viewModelScope.launch {
+                                            scope.launch {
                                                 snackbarHostState.showSnackbar("✅ Экспортировано $count нод в буфер")
                                             }
                                         } else {
-                                            viewModelScope.launch {
+                                            scope.launch {
                                                 snackbarHostState.showSnackbar("❌ Нет нод для экспорта")
                                             }
                                         }
@@ -664,7 +664,7 @@ fun HomeScreen(
             onSave = { updatedConfig ->
                 viewModel.updateNode(updatedConfig)
                 editingConfig = null
-                viewModelScope.launch {
+                scope.launch {
                     snackbarHostState.showSnackbar("✅ Нода сохранена")
                 }
             }
