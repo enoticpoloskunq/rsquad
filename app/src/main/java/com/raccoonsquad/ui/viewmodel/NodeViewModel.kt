@@ -784,26 +784,11 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun testUrlDirect(config: VlessConfig): Pair<Boolean, Long> {
         return withContext(Dispatchers.IO) {
             try {
-                val startTime = System.currentTimeMillis()
+                // Use XrayWrapper.testConfig() - tests SPECIFIC config, not active proxy
+                // This avoids false positives when old Xray is still running
+                val latency = com.raccoonsquad.core.xray.XrayWrapper.testConfig(config)
                 
-                val proxy = java.net.Proxy(
-                    java.net.Proxy.Type.HTTP,
-                    java.net.InetSocketAddress("127.0.0.1", 10809)
-                )
-                val client = okhttp3.OkHttpClient.Builder()
-                    .proxy(proxy)
-                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-                
-                val request = okhttp3.Request.Builder()
-                    .url("https://www.google.com/generate_204")
-                    .build()
-                
-                val response = client.newCall(request).execute()
-                val latency = System.currentTimeMillis() - startTime
-                
-                val success = response.isSuccessful || response.code == 204
+                val success = latency > 0
                 
                 // Update rating stats
                 val updatedConfig = config.copy(
@@ -814,7 +799,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 repository.updateNode(updatedConfig)
                 
-                Pair(success, latency)
+                Pair(success, if (success) latency else 0L)
             } catch (e: Exception) {
                 // Update failure stats
                 val updatedConfig = config.copy(
