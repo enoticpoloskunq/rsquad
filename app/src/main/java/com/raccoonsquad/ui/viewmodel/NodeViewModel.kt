@@ -69,6 +69,10 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _testProgress = MutableStateFlow<Pair<Int, Int>>(0 to 0)  // tested / total
     val testProgress: StateFlow<Pair<Int, Int>> = _testProgress.asStateFlow()
     
+    // Test result for alerts
+    private val _testResult = MutableStateFlow<String?>(null)
+    val testResult: StateFlow<String?> = _testResult.asStateFlow()
+    
     // Test job for cancellation
     private var testJob: kotlinx.coroutines.Job? = null
     
@@ -78,6 +82,7 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
         _isAutoTesting.value = false
         _testingIds.value = emptySet()
         _testProgress.value = 0 to 0
+        _bruteForceState.value = BruteForceState.Idle
     }
     
     /**
@@ -224,6 +229,11 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
                 repository.updateAllNodes(updatedConfigs)
             }
             
+            // Calculate results
+            val successCount = updatedConfigs.count { it.latency != null && it.latency > 0 }
+            val failCount = updatedConfigs.size - successCount
+            _testResult.value = "✅ TCP Ping завершён: $successCount работает, $failCount недоступно"
+            
             _testingIds.value = emptySet()
             _isAutoTesting.value = false
             _testProgress.value = 0 to 0
@@ -269,6 +279,11 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.IO) {
                 repository.updateAllNodes(updatedConfigs)
             }
+            
+            // Calculate results
+            val successCount = updatedConfigs.count { it.lastUrlLatency != null && it.lastUrlLatency > 0 }
+            val failCount = updatedConfigs.size - successCount
+            _testResult.value = "✅ URL тест завершён: $successCount работает, $failCount недоступно"
             
             _isAutoTesting.value = false
             _testProgress.value = 0 to 0
@@ -321,6 +336,11 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.IO) {
                 repository.updateAllNodes(updatedConfigs)
             }
+            
+            // Calculate results
+            val successCount = updatedConfigs.count { it.lastUrlLatency != null && it.lastUrlLatency > 0 }
+            val failCount = updatedConfigs.size - successCount
+            _testResult.value = "✅ VPN тест завершён: $successCount работает, $failCount недоступно"
             
             _isAutoTesting.value = false
             _testProgress.value = 0 to 0
@@ -653,6 +673,90 @@ class NodeViewModel(application: Application) : AndroidViewModel(application) {
     
     fun resetBruteForceState() {
         _bruteForceState.value = BruteForceState.Idle
+    }
+    
+    fun resetTestResult() {
+        _testResult.value = null
+    }
+    
+    /**
+     * Smart clean - checks TCP reachability and URL connectivity, removes all failed nodes
+     * First does TCP ping for all, then URL test for TCP-passing nodes
+     */
+    fun smartCleanNodes() {
+        testJob?.cancel()
+        testJob = viewModelScope.launch {
+            _isAutoTesting.value = true
+            val allNodes = nodes.value
+            val total = allNodes.size
+            _testProgress.value = 0 to total
+            
+            // Track which nodes pass each test
+            val tcpPassed = mutableListOf<VlessConfig>()
+            var tested = 0
+            
+            // Phase 1: TCP ping test
+            allNodes.forEach { config ->
+                if (!isActive) {
+                    LogManager.i("ViewModel", "Smart clean cancelled during TCP phase")
+                    return@launch
+                }
+                
+                val result = NodeTester.testNode(config.serverAddress, config.port, NodeTester.TestMethod.TCP)
+                if (result.success) {
+                    tcpPassed.add(config)
+                }
+                
+                tested++
+                _testProgress.value = tested to total
+            }
+            
+            // Phase 2: URL test for TCP-passing nodes
+            val urlPassed = mutableListOf<VlessConfig>()
+            tcpPassed.forEach { config ->
+                if (!isActive) {
+                    LogManager.i("ViewModel", "Smart clean cancelled during URL phase")
+                    return@launch
+                }
+                
+                val result = NodeTester.testNodeUrl(config)
+                if (result.success) {
+                    urlPassed.add(config.copy(
+                        latency = result.latencyMs,
+                        lastUrlLatency = result.latencyMs,
+                        lastTestTime = System.currentTimeMillis()
+                    ))
+                }
+                
+                tested++
+                _testProgress.value = tested to total
+            }
+            
+            // Calculate nodes to remove
+            val failedIds = allNodes.filter { node ->
+                !urlPassed.any { it.id == node.id }
+            }.map { it.id }
+            
+            // Remove failed nodes
+            if (failedIds.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    failedIds.forEach { repository.deleteNode(it) }
+                }
+                _importCount.value = -failedIds.size
+            }
+            
+            // Update passed nodes with new latency data
+            if (urlPassed.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    repository.updateAllNodes(urlPassed)
+                }
+            }
+            
+            _testResult.value = "🗑️ Удалено ${failedIds.size} нерабочих нод (осталось ${urlPassed.size})"
+            _isAutoTesting.value = false
+            _testProgress.value = 0 to 0
+            testJob = null
+        }
     }
     
     fun toUiState(config: VlessConfig, activeId: String?, index: Int): NodeUiState {

@@ -96,6 +96,7 @@ fun HomeScreen(
     val testingUuids by viewModel.testingUuids.collectAsState()
     val isAutoTesting by viewModel.isAutoTesting.collectAsState()
     val testProgress by viewModel.testProgress.collectAsState()
+    val testResult by viewModel.testResult.collectAsState()
     
     var showImportDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
@@ -168,6 +169,14 @@ fun HomeScreen(
             }
             showImportDialog = false
             viewModel.resetImportCount()
+        }
+    }
+    
+    // Handle test result alerts
+    LaunchedEffect(testResult) {
+        testResult?.let { result ->
+            snackbarHostState.showSnackbar(result)
+            viewModel.resetTestResult()
         }
     }
     
@@ -436,8 +445,8 @@ fun HomeScreen(
             onCancelTest = {
                 viewModel.cancelTest()
             },
-            onAutoCleanTcp = {
-                viewModel.autoTestAndClean(NodeTester.TestMethod.TCP)
+            onSmartClean = {
+                viewModel.smartCleanNodes()
                 showTestDialog = false  // Auto-close
             },
             onDismiss = { 
@@ -800,7 +809,7 @@ fun TestDialog(
     onTestAllThroughVpn: () -> Unit = {},  // Test all nodes through VPN
     onBruteForce: () -> Unit = {},  // Brute force cosmetics
     onCancelTest: () -> Unit = {},  // Cancel current test
-    onAutoCleanTcp: () -> Unit,
+    onSmartClean: () -> Unit = {},  // Smart clean - TCP + URL check
     onDismiss: () -> Unit
 ) {
     val (tested, total) = testProgress
@@ -959,23 +968,23 @@ fun TestDialog(
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
-                // Auto-clean section
+                // Smart clean section
                 Text("Умная очистка:", style = MaterialTheme.typography.labelMedium)
                 Text(
-                    "Удаляет ноды с недоступными портами",
+                    "TCP + URL проверка, удаление нерабочих",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
                 
                 Button(
-                    onClick = onAutoCleanTcp,
+                    onClick = onSmartClean,
                     enabled = !isTesting,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("🗑️ Удалить недоступные")
+                    Text("🗑️ Умная очистка")
                 }
             }
         },
