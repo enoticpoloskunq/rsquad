@@ -6,6 +6,7 @@ import android.net.VpnService
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -219,8 +220,16 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Start
                         ) {
+                            Icon(
+                                imageVector = if (isVpnActive) Icons.Default.Shield else Icons.Default.Pets,
+                                contentDescription = null,
+                                tint = if (isVpnActive) MaterialTheme.colorScheme.primary 
+                                       else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isVpnActive) "🦝 Active" else "🦝 Raccoon Squad",
+                                text = if (isVpnActive) "Connected" else "Raccoon Squad",
                                 maxLines = 1
                             )
                             if (uiStates.isNotEmpty()) {
@@ -982,32 +991,55 @@ fun VpnStatusBanner(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(
+                                color = if (isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
+                                shape = MaterialTheme.shapes.small
+                            )
+                    )
+                    Text(
+                        if (isActive) "VPN Connected" else "VPN Disconnected",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Text(
-                    if (isActive) "🟢 VPN активен" else "⚪ VPN отключен",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    activeNode?.name ?: "$nodeCount нод",
-                    style = MaterialTheme.typography.bodySmall
+                    activeNode?.name ?: if (nodeCount > 0) "$nodeCount nodes available" else "No nodes",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 
                 // Show exit IP if available
                 if (isActive && exitIp != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        Icon(
+                            Icons.Default.Public,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Text(
-                            "🌐 $exitIp",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            exitIp,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (exitCountry != null) {
                             Text(
-                                "($exitCountry)",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                "• $exitCountry",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -1015,12 +1047,24 @@ fun VpnStatusBanner(
                 
                 // Show traffic stats when connected
                 if (isActive && trafficText.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        trafficText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.SwapVert,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            trafficText,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
             
@@ -1029,20 +1073,23 @@ fun VpnStatusBanner(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(
+                    OutlinedButton(
                         onClick = onCheckIp,
                         enabled = !isCheckingIp,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondary
-                        )
+                        modifier = Modifier.height(36.dp)
                     ) {
                         if (isCheckingIp) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onSecondary
+                                strokeWidth = 2.dp
                             )
                         } else {
+                            Icon(
+                                Icons.Default.Public,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text("Check IP")
                         }
                     }
@@ -1050,14 +1097,30 @@ fun VpnStatusBanner(
                         onClick = onDisconnect,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error
-                        )
+                        ),
+                        modifier = Modifier.height(36.dp)
                     ) {
-                        Text("Стоп")
+                        Icon(
+                            Icons.Default.Stop,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Stop")
                     }
                 }
             } else if (nodeCount > 0) {
-                Button(onClick = onConnect) {
-                    Text("Старт")
+                Button(
+                    onClick = onConnect,
+                    modifier = Modifier.height(44.dp)
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Connect", fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -1071,11 +1134,27 @@ fun EmptyState(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("🦝", style = MaterialTheme.typography.displayLarge)
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = MaterialTheme.shapes.large
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Pets,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Нет нод", style = MaterialTheme.typography.titleLarge)
+        Text("No Nodes", style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Нажмите + для импорта",
+            "Tap + to import VLESS links",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1248,7 +1327,9 @@ fun TestDialog(
                                     containerColor = MaterialTheme.colorScheme.error
                                 )
                             ) {
-                                Text("❌ Отменить")
+                                Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Cancel")
                             }
                         }
                     }
@@ -1268,7 +1349,9 @@ fun TestDialog(
                     enabled = !isTesting,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("🔍 TCP Ping всех нод")
+                    Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("TCP Ping All")
                 }
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -1289,7 +1372,9 @@ fun TestDialog(
                         containerColor = MaterialTheme.colorScheme.secondary
                     )
                 ) {
-                    Text("🌐 URL тест всех нод")
+                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("URL Test All")
                 }
             }
         },
@@ -1373,36 +1458,51 @@ fun NodeCard(
             Column(modifier = Modifier.weight(1f)) {
                 // Line 1: Status + Flag + Name + Ping
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Animated status indicator
-                    Text(
-                        text = if (node.isActive) "🟢" else "⚪",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.graphicsLayer {
-                            alpha = if (node.isActive) 1f else 0.6f
-                        }
+                    // Animated status indicator - dot instead of emoji
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (node.isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
+                                shape = MaterialTheme.shapes.extraSmall
+                            )
                     )
-                    // Country flag
+                    Spacer(modifier = Modifier.width(8.dp))
+                    // Country flag (emoji flags are ok, they're not decorative)
                     Text(
-                        text = " ${node.countryFlag}",
+                        text = node.countryFlag,
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = " ${node.name}",
+                        text = node.name,
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                         fontWeight = if (node.isActive) FontWeight.Bold else FontWeight.Normal
                     )
-                    // Ping - always show placeholder or value
-                    Text(
-                        text = node.latency?.let { latency ->
-                            if (latency > 0) "$latency ms" else "✗"
-                        } ?: "—",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (node.latency != null && node.latency > 0) latencyColor 
-                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
+                    // Ping indicator with icon
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Speed,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = if (node.latency != null && node.latency > 0) latencyColor 
+                                   else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                        Text(
+                            text = node.latency?.let { latency ->
+                                if (latency > 0) "${latency}ms" else "--"
+                            } ?: "--",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (node.latency != null && node.latency > 0) latencyColor 
+                                   else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
                 }
                 
                 // Line 2: Server address + Rating
@@ -1417,12 +1517,25 @@ fun NodeCard(
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
-                    // Rating stars
+                    // Rating indicator with icon
                     if (node.ratingStars > 0) {
-                        Text(
-                            text = "⭐".repeat(node.ratingStars),
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = Color(0xFFFFC107)
+                            )
+                            Text(
+                                text = "${node.ratingStars}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFC107),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
@@ -1435,13 +1548,14 @@ fun NodeCard(
                         .clickable { onFavorite() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (node.isFavorite) "⭐" else "☆",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (node.isFavorite) 
+                    Icon(
+                        imageVector = if (node.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = if (node.isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = if (node.isFavorite) 
                             Color(0xFFFFC107) 
                         else 
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
@@ -1455,13 +1569,14 @@ fun NodeCard(
                         .clickable { onToggle() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (node.isActive) "⏹" else "▶",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (node.isActive) 
+                    Icon(
+                        imageVector = if (node.isActive) Icons.Default.Stop else Icons.Default.PlayArrow,
+                        contentDescription = if (node.isActive) "Disconnect" else "Connect",
+                        tint = if (node.isActive) 
                             MaterialTheme.colorScheme.error 
                         else 
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -1475,50 +1590,70 @@ fun CosmeticDialog(
     onApplyPreset: (String) -> Unit,
     onRandomize: () -> Unit
 ) {
+    // Presets with icons instead of emojis
     val presets = listOf(
-        Triple("minimal", "🛡️ Минимальная", "Без маскировки"),
-        Triple("mobile", "📱 Для мобильных", "Оптимизация для мобильных сетей"),
-        Triple("tspu", "🚫 Против ТСПУ", "Обход DPI России"),
-        Triple("maximum", "🔥 Максимальный", "Максимальная маскировка")
+        Triple("minimal", "Minimal", "No masking", Icons.Default.Shield),
+        Triple("mobile", "Mobile Optimized", "For mobile networks", Icons.Default.NetworkCell),
+        Triple("tspu", "Anti-TSPU", "DPI bypass for Russia", Icons.Default.Security),
+        Triple("maximum", "Maximum", "Maximum masking", Icons.Default.Bolt)
     )
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("🎨 Косметика для нод") },
+        title = { 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Node Cosmetics")
+            }
+        },
         text = {
             Column {
                 Text(
-                    "Применить ко всем нодам:",
+                    "Apply to all nodes:",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                presets.forEach { (id, name, desc) ->
-                    TextButton(
+                presets.forEach { (id, name, desc, icon) ->
+                    Surface(
                         onClick = { onApplyPreset(id) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                     ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.Start
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp, horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(name, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                desc,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Icon(
+                                icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                Text(
+                                    desc,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
                 Text(
-                    "Рандомизация против ИИ-анализа:",
+                    "Randomization for anti-AI analysis:",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1535,11 +1670,11 @@ fun CosmeticDialog(
                 ) {
                     Icon(Icons.Default.Shuffle, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("🎲 Рандомизировать все")
+                    Text("Randomize All")
                 }
                 
                 Text(
-                    "Каждая нода получит уникальные случайные настройки",
+                    "Each node will get unique random settings",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)

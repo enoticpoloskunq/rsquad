@@ -43,7 +43,13 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("⚙️ Настройки") },
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Settings, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Settings")
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -264,15 +270,26 @@ fun SettingsScreen(
                         )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Code,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Developer Mode Active",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
                             Text(
-                                "🔧 Developer Mode Active",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                            Text(
-                                "• Все логи (DEBUG, VERBOSE) видны\n" +
-                                "• Технические детали в диагностике\n" +
-                                "• Расширенная информация об ошибках",
+                                "• All logs (DEBUG, VERBOSE) visible\n" +
+                                "• Technical details in diagnostics\n" +
+                                "• Extended error information",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
@@ -294,7 +311,18 @@ fun SettingsScreen(
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("🦝 Raccoon Squad", style = MaterialTheme.typography.titleMedium)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Pets,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Raccoon Squad", style = MaterialTheme.typography.titleMedium)
+                        }
                         Text(
                             "VPN клиент на базе Xray-core",
                             style = MaterialTheme.typography.bodySmall,
@@ -346,7 +374,16 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showUpdateDialog = false },
             title = { 
-                Text(if (updateInfo!!.isUpdateAvailable) "🆕 Доступно обновление" else "✅ Актуальная версия")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (updateInfo!!.isUpdateAvailable) Icons.Default.NewReleases else Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = if (updateInfo!!.isUpdateAvailable) MaterialTheme.colorScheme.primary
+                               else MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (updateInfo!!.isUpdateAvailable) "Update Available" else "Up to Date")
+                }
             },
             text = {
                 Column {
