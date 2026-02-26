@@ -437,7 +437,9 @@ fun HomeScreen(
                 isCheckingIp = isCheckingIp,
                 onConnect = {
                     if (uiStates.isNotEmpty()) {
-                        connectVpn(activity, uiStates.first().config, viewModel)
+                        // Auto-select best node: working + highest rating + favorites first
+                        val bestNode = selectBestNode(uiStates)
+                        connectVpn(activity, bestNode.config, viewModel)
                     }
                 },
                 onDisconnect = {
@@ -794,6 +796,40 @@ fun HomeScreen(
             }
         )
     }
+}
+
+/**
+ * Select the best node for auto-connect
+ * Priority:
+ * 1. Working nodes (latency > 0) are preferred over untested/failed
+ * 2. Favorites are preferred among working nodes
+ * 3. Higher rating score wins
+ * 4. Lower latency wins as tiebreaker
+ */
+private fun selectBestNode(nodes: List<NodeUiState>): NodeUiState {
+    return nodes.sortedWith(
+        compareBy<NodeUiState> { node ->
+            // Priority 1: Working status
+            // Working (latency > 0) = 0, Untested (latency = null) = 1, Failed (latency < 0) = 2
+            when {
+                node.latency != null && node.latency > 0 -> 0  // Working - best
+                node.latency == null -> 1  // Untested - medium
+                else -> 2  // Failed - worst
+            }
+        }
+        .thenByDescending { node ->
+            // Priority 2: Favorite status (favorites first)
+            if (node.isFavorite) 1 else 0
+        }
+        .thenByDescending { node ->
+            // Priority 3: Rating score (higher is better)
+            node.ratingScore
+        }
+        .thenBy { node ->
+            // Priority 4: Latency (lower is better, null = max value)
+            node.latency ?: Long.MAX_VALUE
+        }
+    ).first()
 }
 
 private fun connectVpn(

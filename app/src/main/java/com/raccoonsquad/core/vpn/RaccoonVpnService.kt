@@ -17,26 +17,55 @@ import com.raccoonsquad.data.model.VlessConfig
 import com.raccoonsquad.core.log.LogManager
 import com.raccoonsquad.core.compat.RomCompat
 import com.raccoonsquad.core.stats.TrafficStats
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 class RaccoonVpnService : VpnService() {
     
     companion object {
         const val ACTION_CONNECT = "com.raccoonsquad.CONNECT"
         const val ACTION_DISCONNECT = "com.raccoonsquad.DISCONNECT"
+        const val ACTION_RECONNECT = "com.raccoonsquad.RECONNECT"
         const val NOTIFICATION_ID = 1
         const val CHANNEL_ID = "raccoon_vpn_channel"
+        const val KILL_SWITCH_CHANNEL_ID = "raccoon_kill_switch_channel"
         
         private const val TAG = "VPN"
+        private const val RECONNECT_DELAY_MS = 2000L
+        private const val MAX_RECONNECT_ATTEMPTS = 5
         
         var isActive = false
             private set
         
         var currentConfig: VlessConfig? = null
             private set
+        
+        var isKillSwitchActive = false
+            private set
+        
+        // Callback for UI updates
+        var onConnectionLost: (() -> Unit)? = null
+        var onReconnecting: (() -> Unit)? = null
+        var onReconnected: (() -> Unit)? = null
     }
     
     private var vpnInterface: ParcelFileDescriptor? = null
     private var xrayInitialized = false
+    private var reconnectAttempts = 0
+    private var isUserDisconnect = false
+    private var killSwitchInterface: ParcelFileDescriptor? = null
+    private val reconnectHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val connectionMonitorRunnable = object : Runnable {
+        override fun run() {
+            if (isActive && !XrayWrapper.isRunning()) {
+                LogManager.w(TAG, "Xray stopped unexpectedly!")
+                handleUnexpectedDisconnect()
+            }
+            if (isActive) {
+                reconnectHandler.postDelayed(this, 3000) // Check every 3 seconds
+            }
+        }
+    }
     
     override fun onCreate() {
         super.onCreate()
@@ -44,6 +73,7 @@ class RaccoonVpnService : VpnService() {
         LogManager.flush()
         
         createNotificationChannel()
+        createKillSwitchNotificationChannel()
         RomCompat.applyProcessOptimizations()
         
         LogManager.i(TAG, "VPN Service created")
@@ -90,11 +120,33 @@ class RaccoonVpnService : VpnService() {
                 }
             }
             ACTION_DISCONNECT -> {
+                isUserDisconnect = true
                 disconnect()
                 return START_NOT_STICKY
             }
+            ACTION_RECONNECT -> {
+                if (currentConfig != null) {
+                    LogManager.i(TAG, "Manual reconnect triggered")
+                    reconnectAttempts = 0
+                    connect(currentConfig!!)
+                }
+            }
         }
         return START_STICKY
+    }
+    
+    private fun getSettings(): Pair<Boolean, Boolean> {
+        return try {
+            runBlocking {
+                val settingsManager = com.raccoonsquad.data.settings.SettingsManager(applicationContext)
+                val killSwitch = settingsManager.killSwitch.first()
+                val autoReconnect = settingsManager.autoReconnect.first()
+                Pair(killSwitch, autoReconnect)
+            }
+        } catch (e: Exception) {
+            LogManager.e(TAG, "Failed to read settings", e)
+            Pair(false, true) // Defaults: Kill Switch off, Auto-reconnect on
+        }
     }
     
     private fun connect(config: VlessConfig) {
@@ -211,6 +263,12 @@ class RaccoonVpnService : VpnService() {
             }
             
             isActive = true
+            isUserDisconnect = false
+            isKillSwitchActive = false
+            reconnectAttempts = 0
+            
+            // Start connection monitor
+            reconnectHandler.post(connectionMonitorRunnable)
             
             // Start traffic tracking - use total system traffic
             TrafficStats.startTracking(
@@ -266,6 +324,9 @@ class RaccoonVpnService : VpnService() {
         LogManager.i(TAG, "=== disconnect() ===")
         LogManager.flush()
         
+        // Stop connection monitor
+        reconnectHandler.removeCallbacks(connectionMonitorRunnable)
+        
         isActive = false
         
         // Stop traffic tracking
@@ -286,6 +347,18 @@ class RaccoonVpnService : VpnService() {
         
         currentConfig = null
         
+        // Handle Kill Switch
+        if (!isUserDisconnect) {
+            val (killSwitchEnabled, _) = getSettings()
+            if (killSwitchEnabled) {
+                LogManager.w(TAG, "Kill Switch activated - blocking internet")
+                activateKillSwitch()
+            }
+        } else {
+            // User intentionally disconnected - disable kill switch if active
+            deactivateKillSwitch()
+        }
+        
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Throwable) {
@@ -294,6 +367,130 @@ class RaccoonVpnService : VpnService() {
         
         LogManager.flush()
         stopSelf()
+    }
+    
+    private fun handleUnexpectedDisconnect() {
+        LogManager.w(TAG, "Handling unexpected disconnect...")
+        
+        val (killSwitchEnabled, autoReconnectEnabled) = getSettings()
+        
+        if (autoReconnectEnabled && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++
+            LogManager.i(TAG, "Auto-reconnect attempt $reconnectAttempts/$MAX_RECONNECT_ATTEMPTS")
+            
+            // Notify UI
+            onReconnecting?.invoke()
+            
+            reconnectHandler.postDelayed({
+                if (currentConfig != null && !isUserDisconnect) {
+                    try {
+                        connect(currentConfig!!)
+                        onReconnected?.invoke()
+                    } catch (e: Throwable) {
+                        LogManager.e(TAG, "Reconnect failed", e)
+                        handleUnexpectedDisconnect()
+                    }
+                }
+            }, RECONNECT_DELAY_MS)
+        } else if (killSwitchEnabled) {
+            LogManager.w(TAG, "Max reconnect attempts reached or auto-reconnect disabled, activating Kill Switch")
+            isActive = false
+            activateKillSwitch()
+            onConnectionLost?.invoke()
+        } else {
+            isActive = false
+            onConnectionLost?.invoke()
+        }
+    }
+    
+    private fun activateKillSwitch() {
+        if (isKillSwitchActive) return
+        
+        try {
+            LogManager.i(TAG, "Activating Kill Switch...")
+            
+            // Create a "block all" VPN interface
+            val builder = Builder()
+                .setSession("Raccoon Kill Switch")
+                .setMtu(1280)
+                .addAddress("10.0.0.1", 32)
+                // Don't add any routes - this blocks all traffic
+            
+            killSwitchInterface = builder.establish()
+            isKillSwitchActive = true
+            
+            // Show notification
+            showKillSwitchNotification()
+            
+            LogManager.i(TAG, "Kill Switch activated - internet blocked")
+        } catch (e: Throwable) {
+            LogManager.e(TAG, "Failed to activate Kill Switch", e)
+        }
+    }
+    
+    private fun deactivateKillSwitch() {
+        if (!isKillSwitchActive) return
+        
+        try {
+            LogManager.i(TAG, "Deactivating Kill Switch...")
+            killSwitchInterface?.close()
+            killSwitchInterface = null
+            isKillSwitchActive = false
+            
+            // Remove notification
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.cancel(2)
+            
+            LogManager.i(TAG, "Kill Switch deactivated")
+        } catch (e: Throwable) {
+            LogManager.e(TAG, "Failed to deactivate Kill Switch", e)
+        }
+    }
+    
+    private fun createKillSwitchNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                KILL_SWITCH_CHANNEL_ID, 
+                "Kill Switch", 
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            channel.description = "Kill Switch active - internet blocked"
+            channel.setShowBadge(true)
+            
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+    
+    private fun showKillSwitchNotification() {
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        
+        // Action to deactivate kill switch
+        val deactivateIntent = Intent(this, RaccoonVpnService::class.java).apply {
+            action = ACTION_DISCONNECT
+        }
+        val deactivatePendingIntent = PendingIntent.getService(
+            this, 2, deactivateIntent, PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val notification = androidx.core.app.NotificationCompat.Builder(this, KILL_SWITCH_CHANNEL_ID)
+            .setContentTitle("🛡️ Kill Switch активен")
+            .setContentText("Интернет заблокирован. Нажмите для отключения.")
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_STATUS)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Отключить Kill Switch",
+                deactivatePendingIntent
+            )
+            .build()
+        
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.notify(2, notification)
     }
     
     private fun createNotificationChannel() {
@@ -368,6 +565,8 @@ class RaccoonVpnService : VpnService() {
     override fun onDestroy() {
         LogManager.i(TAG, "VPN onDestroy")
         LogManager.flush()
+        reconnectHandler.removeCallbacks(connectionMonitorRunnable)
+        deactivateKillSwitch()
         disconnect()
         super.onDestroy()
     }
