@@ -376,7 +376,7 @@ fun HomeScreen(
                                 }
                             },
                             onTest = { },
-                            onFavorite = { }
+                            onFavorite = { viewModel.toggleFavorite(node.id) }
                         )
                     }
                     
@@ -1064,9 +1064,6 @@ fun NodeCard(
                             alpha = if (node.isActive) 1f else 0.6f
                         }
                     )
-                    if (node.isFavorite) {
-                        Text(" ⭐", style = MaterialTheme.typography.bodyMedium)
-                    }
                     Text(
                         text = " ${node.name}",
                         style = MaterialTheme.typography.bodyMedium,
@@ -1095,10 +1092,27 @@ fun NodeCard(
                 )
             }
             
+            // Favorite button
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clickable { onFavorite() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (node.isFavorite) "⭐" else "☆",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (node.isFavorite) 
+                        Color(0xFFFFC107) 
+                    else 
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+            
             // Connect/Disconnect button with animation
             Box(
                 modifier = Modifier
-                    .padding(start = 8.dp)
+                    .padding(start = 4.dp)
                     .size(36.dp)
                     .clickable { onToggle() },
                 contentAlignment = Alignment.Center
